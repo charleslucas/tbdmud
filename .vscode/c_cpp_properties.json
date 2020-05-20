@@ -4,9 +4,11 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
+                "${workspaceFolder}/src",
                 "/usr/include",
             
                 "${workspaceFolder}/telnetpp/include",
+                "${workspaceFolder}/serverpp/include",
                 "${workspaceFolder}/terminalpp/include"
             ],
             "defines": [],
