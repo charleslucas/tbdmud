@@ -4,7 +4,10 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
-                "/usr/include"
+                "/usr/include",
+            
+                "${workspaceFolder}/telnetpp/include",
+                "${workspaceFolder}/terminalpp/include"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",

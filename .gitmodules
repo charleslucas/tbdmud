@@ -4,3 +4,6 @@
 [submodule "terminalpp"]
 	path = terminalpp
 	url = https://github.com/KazDragon/terminalpp.git
+[submodule "serverpp"]
+	path = serverpp
+	url = https://github.com/KazDragon/serverpp.git
