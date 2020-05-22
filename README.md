@@ -1,6 +1,18 @@
-A Simple ROT13 server showcasing Telnet++ and Server++.
+A Simple MUD driver server using the Telnet++ and Server++ libraries from KazDragon, based off his rot13_server telnetpp example:
+https://github.com/KazDragon/telnetpp
+https://github.com/KazDragon/serverpp
 
-To build: you will need the Conan remotes that are registered with the following commands:
+
+To build:  You will need Python3 pip installed and a virtualenv to run Conan:
+
+...
+
+virtualenv -p /usr/bin/python3 py3env
+source py3env/bin/activate
+pip install conan
+...
+
+You will need the Conan remotes that are registered with the following commands:
 
 ```
 conan remote add conan-center https://conan.bintray.com
@@ -22,4 +34,4 @@ cmake .
 make -j
 ```
 
-Running the `rot13server` application will then bind to an available port, to which you can connect your Telnet session.
+Running the `tbdmud_server` application will then bind to an available port, to which you can connect your Telnet session.

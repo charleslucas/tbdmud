@@ -7,7 +7,7 @@
 #include <telnetpp/options/suppress_ga/server.hpp>
 #include <telnetpp/options/terminal_type/client.hpp>
 
-namespace rot13 {
+namespace tbdmud {
 
 // ==========================================================================
 // CONNECTION::IMPLEMENTATION STRUCTURE

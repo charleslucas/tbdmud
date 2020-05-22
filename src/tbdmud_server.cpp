@@ -10,6 +10,7 @@
 #include <memory>
 #include <utility>
 #include <vector>
+#include "player.h"
 
 namespace {
 
@@ -40,9 +41,38 @@ serverpp::byte_storage rot13_encode(serverpp::bytes data)
     return serverpp::byte_storage{encoded_data.begin(), encoded_data.end()};
 }
 
+serverpp::byte_storage command_echo(serverpp::bytes data)
+{
+    //auto const &encode_byte = [](serverpp::byte datum)
+    //{
+    //    if (datum >= 'A' && datum <= 'Z')
+    //    {
+    //        return serverpp::byte('A' + (((datum - 'A') + 13) % 26));
+    //    }
+    //    else if (datum >= 'a' && datum <= 'z')
+    //    {
+    //        return serverpp::byte('a' + (((datum - 'a') + 13) % 26));
+    //    }
+    //    else if (datum == '\0')
+    //    {
+    //        return serverpp::byte('\n');
+    //    }
+    //    else
+    //    {
+    //        return datum;
+    //    }
+    //    
+    //};
+    //
+    //auto const encoded_data = data | boost::adaptors::transformed(encode_byte);
+    //return serverpp::byte_storage{encoded_data.begin(), encoded_data.end()};
+
+    return serverpp::byte_storage{data.begin(), data.end()};
 }
 
-namespace rot13 {
+}
+
+namespace tbdmud {
 
 class server
 {
@@ -66,8 +96,12 @@ public:
     }
 
 private:
+
+    std::stringstream command_buffer;
+
     void new_connection(serverpp::tcp_socket &&new_socket)
     {
+
         std::cout << "Accepted new socket\n";
 
         connections_.emplace_back(new connection(std::move(new_socket)));
@@ -110,11 +144,32 @@ private:
 
     void read_handler(connection &cnx, serverpp::bytes data)
     {
-        cnx.write(rot13_encode(data));
+        //cnx.write(rot13_encode(data));
+        cnx.write(data);
+
+        // Iterate over each character (byte) in the input.
+        // Our command delineators are CRs and ;
+        for (serverpp::byte b : data) {
+            if (b == '\r') {  // CR is our cue to process the line
+                const serverpp::byte cr = '\n';
+
+                std::cout << command_buffer.str() << std::endl;
+                command_buffer.str(""); // Clear the buffer
+                cnx.write(cr);          // Move to the next terminal line
+            }
+            else if (b == '\0') {
+                // Ignore Null characters
+            }
+            else {
+                command_buffer << b;
+            }
+        }
+        //command_buffer << std::endl;
     }
 
     void connection_death_handler(connection &dead_connection)
     {
+        // TODO:  Handle player disconnection
         std::cout << "Connection died\n";
 
         const auto is_dead_connection = [&dead_connection](auto const &connection)
@@ -139,7 +194,7 @@ private:
 
     boost::asio::io_context io_context_;
     boost::asio::executor_work_guard<
-        boost::asio::io_context::executor_type> work_;
+    boost::asio::io_context::executor_type> work_;
 
     serverpp::tcp_server tcp_server_;
 
@@ -150,6 +205,7 @@ private:
 
 int main()
 {
-    rot13::server server;
+    tbdmud::player player;
+    tbdmud::server server;
     server.run();
 }

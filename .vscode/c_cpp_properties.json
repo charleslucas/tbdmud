@@ -6,7 +6,6 @@
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/src",
                 "/usr/include",
-            
                 "${workspaceFolder}/telnetpp/include",
                 "${workspaceFolder}/serverpp/include",
                 "${workspaceFolder}/terminalpp/include"
@@ -15,7 +14,8 @@
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c11",
             "cppStandard": "gnu++14",
-            "intelliSenseMode": "clang-x64"
+            "intelliSenseMode": "clang-x64",
+            "compileCommands": "${workspaceFolder}/compile_commands.json"
         }
     ],
     "version": 4

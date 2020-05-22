@@ -8,7 +8,7 @@ namespace serverpp {
 class tcp_socket;
 }
 
-namespace rot13 {
+namespace tbdmud {
 
 //* =========================================================================
 /// \brief An connection to a socket that abstracts away details about the
