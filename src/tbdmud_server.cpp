@@ -1,211 +1,161 @@
-#include "connection.hpp"
-#include <serverpp/tcp_server.hpp>
-#include <boost/range/adaptor/filtered.hpp>
-#include <boost/range/adaptor/transformed.hpp>
-#include <boost/range/algorithm/for_each.hpp>
-#include <boost/range/algorithm_ext/erase.hpp>
-#include <algorithm>
-#include <functional>
-#include <iostream>
-#include <memory>
-#include <utility>
-#include <vector>
-#include "player.h"
+#include <boost/asio.hpp>
+#include <optional>
+#include <queue>
+#include <unordered_set>
 
-namespace {
+namespace io = boost::asio;
+using tcp = io::ip::tcp;
+using error_code = boost::system::error_code;
 
-serverpp::byte_storage rot13_encode(serverpp::bytes data)
-{
-    auto const &encode_byte = [](serverpp::byte datum)
-    {
-        if (datum >= 'A' && datum <= 'Z')
-        {
-            return serverpp::byte('A' + (((datum - 'A') + 13) % 26));
-        }
-        else if (datum >= 'a' && datum <= 'z')
-        {
-            return serverpp::byte('a' + (((datum - 'a') + 13) % 26));
-        }
-        else if (datum == '\0')
-        {
-            return serverpp::byte('\n');
-        }
-        else
-        {
-            return datum;
-        }
-        
-    };
+using message_handler = std::function<void (std::string)>;
+using error_handler = std::function<void ()>;
 
-    auto const encoded_data = data | boost::adaptors::transformed(encode_byte);
-    return serverpp::byte_storage{encoded_data.begin(), encoded_data.end()};
-}
-
-serverpp::byte_storage command_echo(serverpp::bytes data)
-{
-    //auto const &encode_byte = [](serverpp::byte datum)
-    //{
-    //    if (datum >= 'A' && datum <= 'Z')
-    //    {
-    //        return serverpp::byte('A' + (((datum - 'A') + 13) % 26));
-    //    }
-    //    else if (datum >= 'a' && datum <= 'z')
-    //    {
-    //        return serverpp::byte('a' + (((datum - 'a') + 13) % 26));
-    //    }
-    //    else if (datum == '\0')
-    //    {
-    //        return serverpp::byte('\n');
-    //    }
-    //    else
-    //    {
-    //        return datum;
-    //    }
-    //    
-    //};
-    //
-    //auto const encoded_data = data | boost::adaptors::transformed(encode_byte);
-    //return serverpp::byte_storage{encoded_data.begin(), encoded_data.end()};
-
-    return serverpp::byte_storage{data.begin(), data.end()};
-}
-
-}
-
-namespace tbdmud {
-
-class server
+class session : public std::enable_shared_from_this<session>
 {
 public:
-    server()
-      : work_(boost::asio::make_work_guard(io_context_)),
-        tcp_server_(
-            io_context_, 
-            0, 
-            [this](auto &&new_socket) 
-            { 
-                this->new_connection(std::forward<decltype(new_socket)>(new_socket));
-            })
+
+    session(tcp::socket&& socket)
+    : socket(std::move(socket))
     {
-        std::cout << "TCP Server started up on port " << tcp_server_.port() << "\n";
     }
 
-    void run()
+    void start(message_handler&& on_message, error_handler&& on_error)
     {
-        io_context_.run();
+        this->on_message = std::move(on_message);
+        this->on_error = std::move(on_error);
+        async_read();
+    }
+
+    void post(std::string const& message)
+    {
+        bool idle = outgoing.empty();
+        outgoing.push(message);
+
+        if(idle)
+        {
+            async_write();
+        }
     }
 
 private:
 
-    std::stringstream command_buffer;
-
-    void new_connection(serverpp::tcp_socket &&new_socket)
+    void async_read()
     {
-
-        std::cout << "Accepted new socket\n";
-
-        connections_.emplace_back(new connection(std::move(new_socket)));
-        auto &connection = connections_.back();
-
-        connection->async_get_terminal_type(
-            [](std::string const &ttype)
-            {
-                std::cout << "Terminal type = " << ttype << "\n";
-            });
-
-        connection->on_window_size_changed(
-            [](std::uint16_t width, std::uint16_t height)
-            {
-                std::cout << "Window size is now " << width << "x" << height << "\n";
-            });
-
-        schedule_read(*connection);
+        io::async_read_until(socket, streambuf, "\n", [self = shared_from_this()] (error_code error, std::size_t bytes_transferred)
+        {
+            self->on_read(error, bytes_transferred);
+        });
     }
 
-    void schedule_read(connection &cnx)
+    void on_read(error_code error, std::size_t bytes_transferred)
     {
-        cnx.async_read(
-            [this, &cnx](serverpp::bytes data)
-            {
-                read_handler(cnx, data);
-            },
-            [this, &cnx]()
-            {
-                if (cnx.is_alive())
-                {
-                    schedule_read(cnx);
-                }
-                else
-                {
-                    connection_death_handler(cnx);
-                }
-            });
+        if(!error)
+        {
+            std::stringstream message;
+            message << socket.remote_endpoint(error) << ": " << std::istream(&streambuf).rdbuf();
+            streambuf.consume(bytes_transferred);
+            on_message(message.str());
+            async_read();
+        }
+        else
+        {
+            socket.close(error);
+            on_error();
+        }
     }
 
-    void read_handler(connection &cnx, serverpp::bytes data)
+    void async_write()
     {
-        //cnx.write(rot13_encode(data));
-        cnx.write(data);
+        io::async_write(socket, io::buffer(outgoing.front()), [self = shared_from_this()] (error_code error, std::size_t bytes_transferred)
+        {
+            self->on_write(error, bytes_transferred);
+        });
+    }
 
-        // Iterate over each character (byte) in the input.
-        // Our command delineators are CRs and ;
-        for (serverpp::byte b : data) {
-            if (b == '\r') {  // CR is our cue to process the line
-                const serverpp::byte cr = '\n';
+    void on_write(error_code error, std::size_t bytes_transferred)
+    {
+        if(!error)
+        {
+            outgoing.pop();
 
-                std::cout << command_buffer.str() << std::endl;
-                command_buffer.str(""); // Clear the buffer
-                cnx.write(cr);          // Move to the next terminal line
-            }
-            else if (b == '\0') {
-                // Ignore Null characters
-            }
-            else {
-                command_buffer << b;
+            if(!outgoing.empty())
+            {
+                async_write();
             }
         }
-        //command_buffer << std::endl;
-    }
-
-    void connection_death_handler(connection &dead_connection)
-    {
-        // TODO:  Handle player disconnection
-        std::cout << "Connection died\n";
-
-        const auto is_dead_connection = [&dead_connection](auto const &connection)
+        else
         {
-            return connection.get() == &dead_connection;
-        };
-
-        boost::for_each(
-            connections_ | boost::adaptors::filtered(is_dead_connection),
-            [](auto &connection)
-            {
-                connection.reset();
-            });
-
-        boost::remove_erase_if(
-            connections_,
-            [](auto const &connection)
-            {
-                return !connection;
-            });
+            socket.close(error);
+            on_error();
+        }
     }
 
-    boost::asio::io_context io_context_;
-    boost::asio::executor_work_guard<
-    boost::asio::io_context::executor_type> work_;
-
-    serverpp::tcp_server tcp_server_;
-
-    std::vector<std::unique_ptr<connection>> connections_;
+    tcp::socket socket;
+    io::streambuf streambuf;
+    std::queue<std::string> outgoing;
+    message_handler on_message;
+    error_handler on_error;
 };
 
-}
+class server
+{
+public:
+
+    server(io::io_context& io_context, std::uint16_t port)
+    : io_context(io_context)
+    , acceptor  (io_context, tcp::endpoint(tcp::v4(), port))
+    {
+    }
+
+    void async_accept()
+    {
+        socket.emplace(io_context);
+
+        acceptor.async_accept(*socket, [&] (error_code error)
+        {
+            auto client = std::make_shared<session>(std::move(*socket));
+            client->post("Welcome to chat\n\r");
+            post("We have a newcomer\n\r");
+
+            clients.insert(client);
+
+            client->start
+            (
+                std::bind(&server::post, this, std::placeholders::_1),
+                [&, client]
+                {
+                    if(clients.erase(client))
+                    {
+                        post("We are one less\n\r");
+                    }
+                }
+            );
+
+            async_accept();
+        });
+    }
+
+    void post(std::string const& message)
+    {
+        for(auto& client : clients)
+        {
+            client->post(message);
+        }
+    }
+
+private:
+
+    io::io_context& io_context;
+    tcp::acceptor acceptor;
+    std::optional<tcp::socket> socket;
+    std::unordered_set<std::shared_ptr<session>> clients;
+};
 
 int main()
 {
-    tbdmud::player player;
-    tbdmud::server server;
-    server.run();
+    io::io_context io_context;
+    server srv(io_context, 15001);
+    srv.async_accept();
+    io_context.run();
+    return 0;
 }
