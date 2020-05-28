@@ -4,7 +4,7 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
-                "${workspaceFolder}/src",
+                "${workspaceFolder}/include",
                 "/usr/include",
                 "${workspaceFolder}/telnetpp/include",
                 "${workspaceFolder}/serverpp/include",
