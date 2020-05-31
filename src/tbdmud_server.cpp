@@ -1,5 +1,6 @@
 #include <iostream>
 #include <boost/asio.hpp>
+#include <boost/bind/bind.hpp>
 #include <boost/algorithm/string.hpp>
 #include <optional>
 #include <queue>
@@ -10,7 +11,7 @@ namespace io = boost::asio;
 using tcp = io::ip::tcp;
 using error_code = boost::system::error_code;
 
-using message_handler = std::function<void (std::string)>;
+using command_handler = std::function<void (std::string)>;
 using error_handler = std::function<void ()>;
 
 // Create shared-pointer session objects for each connected client
@@ -27,9 +28,9 @@ public:
     }
 
     // Register the passed-in message and error handler functions to the session object, start asynchronous socket reads
-    void start(message_handler&& on_message, error_handler&& on_error)
+    void start(command_handler&& on_command, error_handler&& on_error)
     {
-        this->on_message = std::move(on_message);
+        this->on_command = std::move(on_command);
         this->on_error = std::move(on_error);
         //async_read();
         async_login_username();
@@ -77,7 +78,7 @@ private:
     }
 
     void on_username(error_code error, std::size_t bytes_transferred) {
-        std::string delimiters = ": ";
+        const std::string delimiters = ": ";
         std::vector<std::string> substrings;
         
         if(!error)
@@ -103,27 +104,27 @@ private:
             std::cout << "User " << player.username << " has connected from " << player.ip_address << ":" << player.port << std::endl << std::endl;
             post("User " + player.username + " has connected.\n");
 
-            //on_message(message.str());  // Call the custom message handler
-            async_read();               // Start handling message reads
+            async_read();               // Start handling asynchronous command inputs
         }
         else
         {
             // Call the error handler, then exit
+            player.connected = false;
             socket.close(error);
             on_error();
         }
     }
 
-    // Call the message or error handlers depending on input
+    // Call the command or error handlers depending on input
     void on_read(error_code error, std::size_t bytes_transferred)
     {
         if(!error)
         {
-            // Create a message from received data, call the message handler
-            std::stringstream message;
-            message << player.username << ":  " << std::istream(&streambuf).rdbuf();
+            std::stringstream line;
+            line << player.username << ":  " << std::istream(&streambuf).rdbuf();
             streambuf.consume(bytes_transferred);
-            on_message(message.str());  // Call the custom message handler
+
+            on_command(line.str());     // Pass the received line string to the command handler to decode commands and create events
             async_read();               // Recursive call to do the next read
         }
         else
@@ -167,8 +168,8 @@ private:
     tcp::socket socket;                 // The socket for this client
     io::streambuf streambuf;            // Incoming data
     std::queue<std::string> outgoing;   // Outgoing messages
-    message_handler on_message;         // Message handler
-    error_handler on_error;             // Error handler
+    command_handler on_command;         // Client command handler
+    error_handler   on_error;           // Client error handler
 };
 
 class server
@@ -209,17 +210,18 @@ public:
             // Start the asynchronous command handler for this client entering the game
             client->start
             (
-                // Pass in message handler
-                std::bind(&server::post, this, std::placeholders::_1),
+                // Pass in the command handler
+                //std::bind(&server::post, this, std::placeholders::_1),
+                std::bind(&server::command_parse, this, std::placeholders::_1),
 
-                // Pass in error handler
+                // Pass in the error handler
                 [&, client]
                 {
                     const std::string username = client->player.username;  // Copy the name before we delete the client
 
                     if(clients.erase(client))
                     {
-                        post(username + " has disconnected - we are one less\n\r");
+                        post(username + " has disconnected.\n\r");
                         num_connections--;
                         std::cout << "Number of connections:  " << num_connections << std::endl;
                     }
@@ -239,6 +241,32 @@ public:
         }
     }
 
+    // Decode commands given by the client, create events and put them in the queue
+    // Multiple commands can be given on a line, separated by ;
+    // Individual command arguments are separated by spaces: <command> <arg1> <arg2>, etc
+    // After all explicit commands are checked for, we will check to see if the command matches valid exits from the room
+    void command_parse(std::string const& line)
+    {
+        const std::string command_delimiters = ";";
+        const std::string parameter_delimiters = " ";
+        std::vector<std::string> commands;
+
+        boost::split(commands, line, boost::is_any_of(command_delimiters), boost::token_compress_on);  // Split the commands
+
+        // Iterate over each command
+        for(std::string c : commands) {
+            std::vector<std::string> parameters;
+
+            boost::split(parameters, c, boost::is_any_of(parameter_delimiters), boost::token_compress_on);  // Split the parameters
+        }
+
+        
+        //for(auto& client : clients)
+        //{
+        //    client->post(message);
+        //}
+    }
+
 private:
 
     io::io_context& io_context;                             // The main I/O service provider that handles executing asynchronous scheduled tasks
@@ -247,12 +275,28 @@ private:
     std::unordered_set<std::shared_ptr<session>> clients;   // A set of connected clients
 };
 
+// Call the tick function of the world approximately once a second (doesn't have to be exact)
+void tick(const boost::system::error_code& /*e*/, io::steady_timer* t, tbdmud::world* w)
+{
+    std::cout << "tick" << std::endl;
+    w->tick();
+
+    // Move the expiration time of our timer up by one second and set it again
+    t->expires_at(t->expiry() + io::chrono::seconds(1));
+    t->async_wait(boost::bind(tick, io::placeholders::error, t, w));
+}
+
 int main()
 {
+    tbdmud::world world;
     io::io_context io_context;
-
+    io::steady_timer ticktimer(io_context, io::chrono::seconds(1));
     server srv(io_context, 15001);
-    srv.async_accept();
+
+    // Tasks to be asynchronously run by the server
+    srv.async_accept();                                                                     // Asynchronously accept incoming TCP traffic
+    ticktimer.async_wait(boost::bind(tick, io::placeholders::error, &ticktimer, &world));   // Asynchronously but regularly trigger a tick update
+
     io_context.run();  // Invoke the completion handlers
 
     return 0;
