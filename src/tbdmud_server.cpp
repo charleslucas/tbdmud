@@ -281,13 +281,11 @@ public:
             boost::split(parameters, c, boost::is_any_of(parameter_delimiters), boost::token_compress_on);  // Split the parameters
 
             if (boost::iequals(parameters.front(), "?")) {
+                std::cout << "Help Requested" << std::endl;
             }
             if (boost::iequals(parameters.front(), "say")) {
                 tbdmud::event_item mevent;
-
-                
-
-
+                //client->post("Valid Commands:");
             }
             else {
 
