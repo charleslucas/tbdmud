@@ -5,6 +5,7 @@
 #include <optional>
 #include <queue>
 #include <unordered_set>
+#include <events.h>
 #include <tbdmud.h>
 
 namespace io = boost::asio;
@@ -19,12 +20,13 @@ class session : public std::enable_shared_from_this<session>
 {
 public:
 
-    tbdmud::player    player;     // Once a client has been authenticated they will populate the player data from file
-    tbdmud::character character;  // Once a player has been populated they will choose their character for this session
+    std::shared_ptr<tbdmud::player>  player;     // Once a client has been authenticated they will populate the player data from file
+    //tbdmud::character character;  // Once a player has been populated they will choose their character for this session
 
     // Constructor - initialize our internal socket from the passed-in socket
-    session(tcp::socket&& socket) : socket(std::move(socket))
+    session(tcp::socket&& socket, uint sid) : socket(std::move(socket))
     {
+        session_id = sid;
     }
 
     // Register the passed-in message and error handler functions to the session object, start asynchronous socket reads
@@ -54,6 +56,8 @@ public:
     }
 
 private:
+
+    uint session_id = 0;
 
     void async_login_username() {
         const std::string login_prompt = "Enter username or \"new\": --> ";
@@ -91,25 +95,26 @@ private:
             username << std::istream(&streambuf).rdbuf();  // Grab the name input from the connected client
             streambuf.consume(bytes_transferred);
 
-            player.connected = true;
+            player = std::shared_ptr<tbdmud::player>(new tbdmud::player(username.str(), session_id));
+            player->connected = true;
 
             boost::split(substrings, client_ip.str(), boost::is_any_of(delimiters), boost::token_compress_on);  // Split the IP address and port
 
-            player.ip_address = substrings[0];
-            player.port = std::stoi(substrings[1]);
+            player->ip_address = substrings[0];
+            player->port = std::stoi(substrings[1]);
 
-            player.username = username.str();
-            boost::trim_right(player.username);  // Remove the trailing \n
+            player->username = username.str();
+            boost::trim_right(player->username);  // Remove the trailing \n
 
-            std::cout << "User " << player.username << " has connected from " << player.ip_address << ":" << player.port << std::endl << std::endl;
-            post("User " + player.username + " has connected.\n");
+            std::cout << "User " << player->username << " has connected from " << player->ip_address << ":" << player->port << std::endl << std::endl;
+            post("User " + player->username + " has connected.\n");
 
             async_read();               // Start handling asynchronous command inputs
         }
         else
         {
             // Call the error handler, then exit
-            player.connected = false;
+            player->connected = false;
             socket.close(error);
             on_error();
         }
@@ -121,7 +126,7 @@ private:
         if(!error)
         {
             std::stringstream line;
-            line << player.username << ":  " << std::istream(&streambuf).rdbuf();
+            line << player->username << ":  " << std::istream(&streambuf).rdbuf();
             streambuf.consume(bytes_transferred);
 
             on_command(line.str());     // Pass the received line string to the command handler to decode commands and create events
@@ -176,11 +181,17 @@ class server
 {
 public:
 
-    int num_connections = 0;
+    uint num_connections = 0;
 
     // Class Constructor
     server(io::io_context& io_context, std::uint16_t port) : io_context(io_context), acceptor(io_context, tcp::endpoint(tcp::v4(), port))
     {
+    }
+
+    // Class Constructor
+    server(io::io_context& io_context, std::uint16_t port, std::shared_ptr<tbdmud::world> world_ptr) : io_context(io_context), acceptor(io_context, tcp::endpoint(tcp::v4(), port))
+    {
+        world = world_ptr;
     }
 
     void async_accept()
@@ -193,8 +204,11 @@ public:
             const std::string welcome_msg = "\n\rWelcome to TBDMud!\n\r\n\r";
             const std::string connect_notice = "has connected to TBDMud!\n\r";
 
+            num_connections++;
+            std::cout << "Number of connections:  " << num_connections << std::endl;
+
             // Create a reference to the new client's session
-            auto client = std::make_shared<session>(std::move(*socket));
+            auto client = std::make_shared<session>(std::move(*socket), num_connections);
 
             // Write our welcome message to the new client
             client->post(welcome_msg);
@@ -204,8 +218,6 @@ public:
 
             // Add our new client to the full list of connected clients
             clients.insert(client);
-            num_connections++;
-            std::cout << "Number of connections:  " << num_connections << std::endl;
 
             // Start the asynchronous command handler for this client entering the game
             client->start
@@ -214,10 +226,10 @@ public:
                 //std::bind(&server::post, this, std::placeholders::_1),
                 std::bind(&server::command_parse, this, std::placeholders::_1),
 
-                // Pass in the error handler
+                // Pass in the error handler (runs on disconnect)
                 [&, client]
                 {
-                    const std::string username = client->player.username;  // Copy the name before we delete the client
+                    const std::string username = client->player->username;  // Copy the name before we delete the client
 
                     if(clients.erase(client))
                     {
@@ -241,6 +253,15 @@ public:
         }
     }
 
+    // The different scopes of effect that an event can have
+    enum valid_commands {
+        HELP,             // Help message
+        TELL,             // Send a message to a specific player
+        SAY,              // Say something to everyone in the current room
+        SHOUT,            // Shout to everyone in the zone
+        BROADCAST         // Broadcast a message to everyone in the world
+    };
+
     // Decode commands given by the client, create events and put them in the queue
     // Multiple commands can be given on a line, separated by ;
     // Individual command arguments are separated by spaces: <command> <arg1> <arg2>, etc
@@ -259,9 +280,16 @@ public:
 
             boost::split(parameters, c, boost::is_any_of(parameter_delimiters), boost::token_compress_on);  // Split the parameters
 
+            if (boost::iequals(parameters.front(), "?")) {
+            }
             if (boost::iequals(parameters.front(), "say")) {
-                tbdmud::message_event mevent;
+                tbdmud::event_item mevent;
 
+                
+
+
+            }
+            else {
 
             }
         }
@@ -273,17 +301,16 @@ public:
     }
 
 private:
-
     io::io_context& io_context;                             // The main I/O service provider that handles executing asynchronous scheduled tasks
     tcp::acceptor acceptor;                                 // An object that accepts incoming connections
     std::optional<tcp::socket> socket;                      // A socket object that can be "null"
     std::unordered_set<std::shared_ptr<session>> clients;   // A set of connected clients
+    std::shared_ptr<tbdmud::world> world;                   // Pointer to the world object in the server
 };
 
 // Call the tick function of the world approximately once a second (doesn't have to be exact)
 void tick(const boost::system::error_code& /*e*/, io::steady_timer* t, tbdmud::world* w)
 {
-    std::cout << "tick" << std::endl;
     w->tick();
 
     // Move the expiration time of our timer up by one second and set it again
@@ -296,7 +323,7 @@ int main()
     tbdmud::world world;
     io::io_context io_context;
     io::steady_timer ticktimer(io_context, io::chrono::seconds(1));
-    server srv(io_context, 15001);
+    server srv(io_context, 15001, std::make_shared<tbdmud::world>(world));
 
     // Tasks to be asynchronously run by the server
     srv.async_accept();                                                                     // Asynchronously accept incoming TCP traffic
