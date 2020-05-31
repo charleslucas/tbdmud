@@ -77,96 +77,166 @@ class player {
         }
 };
 
-class event {
+class event_item {
     private:
-        // These are set by the originating entity
+        // These are overridden by the derivative event class or set by the originating entity
         std::string name;                                 // Just for logging purposes
         event_scope scope = SELF;                         // The scope of the effect of this events 
         std::map<event_scope, std::string> message_map;   // Potential different messages for each scope
         uint relative_tick = 0;                           // Set if the event should happen N ticks from now
 
+    public:
+
+        uint rtick() {
+            return relative_tick;
+        };
+
+        bool has_message(event_scope es) {
+            return(false);
+        };
+
+        // Return a particular message given the scope
+        std::string message(event_scope es) {
+            //TODO:  check that the scope actually exists
+            return message_map[es];
+        };
+
+        virtual std::string message() {
+            // A derivative class can select which message scope to return by default
+            return "";
+        };
+
+};
+
+class tell_event : event_item {
+    private:
+    public:
+
+    void set_message(std::string m) {
+        // Insert into the target scope of the message map
+
+    }
+};
+
+class say_event : event_item {
+    private:
+    public:
+
+    void set_message(std::string m) {
+        // Insert into the room scope of the message map
+
+    }
+};
+
+class shout_event : event_item {
+    private:
+    public:
+
+    void set_message(std::string m) {
+        // Insert into the zone scope of the message map
+        
+    }
+};
+
+class broadcast_event : event_item {
+    private:
+    public:
+
+    void set_message(std::string m) {
+        // Insert into the global scope of the message map
+        
+    }
+};
+
+class message_event : event_item {
+    private:
+        std::string message;
+    public:
+};
+
+class move_event : event_item {
+    private:
+        std::string message;
+    public:
+};
+
+// Wrap a derived event class so we can put different derived event types in the same priority queue
+class event_wrapper {
+    private:
         // These are set by the event queue
-        uint unique_id = 0;                               // The unique sequential id for this event (set by the event queue)
-        uint scheduled_tick = 0;                          // The tick (server time) when this event is scheduled to happen (0 = immediate)
+        uint      unique_id = 0;                               // The unique sequential id for this event (set by the event queue)
+        uint64_t scheduled_tick = 0;                          // The tick (server time) when this event is scheduled to happen (0 = immediate)
+        std::shared_ptr<event_item> event;
 
     public:
+
+        event_wrapper() {}
+
+        event_wrapper(std::shared_ptr<event_item> e) {
+            event = e;
+        };
 
         void set_id(uint i) {
             unique_id = i;
         };
 
-        uint rtick() {
-            return relative_tick;
+        void set_stick(uint64_t s) {
+            scheduled_tick = s;
         }
 
         uint id() {
             return unique_id;
         }
 
-        bool has_message(event_scope es) {
-            return(false);
-        };
+        uint64_t stick() {
+            return scheduled_tick;
+        }
 
-        std::string message(event_scope es) {
-            return message_map[es];
-        };
+        void set_event(std::shared_ptr<event_item> e) {
+            event = e;
+        }
 
         // Overload operators
-        bool operator< (const event& other) {
-            if (relative_tick == other.relative_tick)  {
+        bool operator< (const event_wrapper& other) {
+            if (event->rtick() == other.event->rtick())  {
                 if (unique_id < other.unique_id) return true;
                 else return false;
             }
-            else if (relative_tick < other.relative_tick) return true;
+            else if (event->rtick() < other.event->rtick()) return true;
             else return false;
         };
 
-        bool operator> (const event& other) {
-            if (relative_tick == other.relative_tick)  {
+        bool operator> (const event_wrapper& other) {
+            if (event->rtick() == other.event->rtick())  {
                 if (unique_id > other.unique_id) return true;
                 else return false;
             }
-            else if (relative_tick > other.relative_tick) return true;
+            else if (event->rtick() > other.event->rtick()) return true;
             else return false;
         }
 
-        friend bool operator< (const event& other, const event& rhs);
-        friend bool operator> (const event& other, const event& rhs);
-
+        friend bool operator< (const event_wrapper& other, const event_wrapper& rhs);
+        friend bool operator> (const event_wrapper& other, const event_wrapper& rhs);
 };
 
 // Overloaded < operator for priority queue event comparisons
-bool operator< (const event& lhs, const event& rhs) {
-    if (lhs.relative_tick == rhs.relative_tick)  {
+bool operator< (const event_wrapper& lhs, const event_wrapper& rhs) {
+    if (lhs.event->rtick() == rhs.event->rtick())  {
         if (lhs.unique_id < rhs.unique_id) return true;
         else return false;
     }
-    else if (lhs.relative_tick < rhs.relative_tick) return true;
+    else if (lhs.event->rtick() < rhs.event->rtick()) return true;
     else return false;
 };
 
 // Overloaded > operator for priority queue event comparisons
-bool operator> (const event& lhs, const event& rhs) {
-    if (lhs.relative_tick == rhs.relative_tick)  {
+bool operator> (const event_wrapper& lhs, const event_wrapper& rhs) {
+    if (lhs.event->rtick() == rhs.event->rtick())  {
         if (lhs.unique_id > rhs.unique_id) return true;
         else return false;
     }
-    else if (lhs.relative_tick > rhs.relative_tick) return true;
+    else if (lhs.event->rtick() > rhs.event->rtick()) return true;
     else return false;
-};
-
-
-
-class message_event : event {
-    private:
-        std::string message;
-    public:
-};
-
-class move_event : event {
-    private:
-        std::string message;
-    public:
 };
 
 // The comparison function to be used with the priority queue in the event queue class
@@ -181,18 +251,8 @@ class move_event : event {
 class event_queue {
     private:
         uint64_t*  world_elapsed_ticks;
-        uint event_counter = 0;
-        bool Compare = [](event a, event b) {
-            if      (a.rtick() < b.rtick())  return true;
-            else if (a.rtick() > b.rtick())  return false;
-            else {
-                if (a.id() < b.id()) return true;
-                else                 return false;
-                // TODO:  if a.id() == b.id() throw an exception
-            }
-        };
-        //std::priority_queue<event> events;
-        std::priority_queue<event> event_pq;
+        uint       event_counter = 0;
+        std::priority_queue<event_wrapper> event_pq;
 
     public:
 
@@ -204,22 +264,29 @@ class event_queue {
             world_elapsed_ticks = wet;
         };
 
-        // Provide an event which will be sorted by time and then ID as it is added to the priority queue
-        void add_event(event e) {
-            e.set_id(event_counter);
+        // Provide a shared pointer to an event - events will be sorted by time and then ID as they are added to the priority queue
+        void add_event(event_item e) {
+            event_wrapper ew;
+
+            ew.set_id(event_counter);
             event_counter++;
+
+            // Set the world-relative tick that this event will trigger on
+            ew.set_stick(*world_elapsed_ticks + e.rtick());
+
+            ew.set_event(std::make_shared<event_item>(e));
             
-            event_pq.push(e);
+            event_pq.push(ew);
         };
 
         // Return the most current event
-        event get_event() {
-            event e;
+        event_wrapper get_event() {
+            event_wrapper ew;
 
-            e = event_pq.top();
+            ew = event_pq.top();
             event_pq.pop();
 
-            return e;
+            return ew;
         };
 
 };

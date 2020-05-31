@@ -258,8 +258,13 @@ public:
             std::vector<std::string> parameters;
 
             boost::split(parameters, c, boost::is_any_of(parameter_delimiters), boost::token_compress_on);  // Split the parameters
-        }
 
+            if (boost::iequals(parameters.front(), "say")) {
+                tbdmud::message_event mevent;
+
+
+            }
+        }
         
         //for(auto& client : clients)
         //{
