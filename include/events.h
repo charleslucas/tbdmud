@@ -181,32 +181,43 @@ bool operator> (const event_wrapper& lhs, const event_wrapper& rhs) {
 class event_queue {
     private:
         uint64_t*  world_elapsed_ticks;
-        uint       event_counter = 0;
+        uint       event_counter;
         std::priority_queue<event_wrapper> event_pq;
 
     public:
+        std::string name;  // TODO:  Just for testing
 
         // Default constructor
-        event_queue() {};
+        event_queue() {
+            event_counter = 0;
+        };
 
         // Class constructor - store a pointer to the world elapsed ticks counter
         event_queue(uint64_t* wet) {
+            event_counter = 0;
             world_elapsed_ticks = wet;
         };
 
         // Provide a shared pointer to an event - events will be sorted by time and then ID as they are added to the priority queue
-        void add_event(event_item e) {
+        void add_event(std::shared_ptr<event_item> e) {
             event_wrapper ew;
-
-            ew.set_id(event_counter);
-            event_counter++;
+            uint ec;
+            
+            std::cout << "Add event" << std::endl;
+            ec = event_counter;
+            //std::cout << "Set ID:  " << event_counter << std::endl; 
+            //ew.set_id(event_counter);
+            //event_counter++;
 
             // Set the world-relative tick that this event will trigger on
-            ew.set_stick(*world_elapsed_ticks + e.rtick());
-
-            ew.set_event(std::make_shared<event_item>(e));
-            
-            event_pq.push(ew);
+//            std::cout << "Set STick:  " << *world_elapsed_ticks << " + " << e->rtick() << std::endl; 
+//            ew.set_stick(*world_elapsed_ticks + e->rtick());
+//
+//            std::cout << "Set Event" << std::endl; 
+//            ew.set_event(e);
+//            
+//            std::cout << "Push" << std::endl; 
+//            event_pq.push(ew);
         };
 
         // Return the most current event

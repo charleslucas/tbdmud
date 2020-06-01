@@ -24,9 +24,10 @@ public:
     //tbdmud::character character;  // Once a player has been populated they will choose their character for this session
 
     // Constructor - initialize our internal socket from the passed-in socket
-    session(tcp::socket&& socket, uint sid) : socket(std::move(socket))
+    session(tcp::socket&& socket, uint sid, std::shared_ptr<tbdmud::world> w) : socket(std::move(socket))
     {
         session_id = sid;
+        world = w;
     }
 
     // Register the passed-in message and error handler functions to the session object, start asynchronous socket reads
@@ -81,6 +82,7 @@ private:
         });
     }
 
+    // Validate user login and create the player object
     void on_username(error_code error, std::size_t bytes_transferred) {
         const std::string delimiters = ": ";
         std::vector<std::string> substrings;
@@ -95,19 +97,21 @@ private:
             username << std::istream(&streambuf).rdbuf();  // Grab the name input from the connected client
             streambuf.consume(bytes_transferred);
 
-            player = std::shared_ptr<tbdmud::player>(new tbdmud::player(username.str(), session_id));
-            player->connected = true;
-
             boost::split(substrings, client_ip.str(), boost::is_any_of(delimiters), boost::token_compress_on);  // Split the IP address and port
 
-            player->ip_address = substrings[0];
-            player->port = std::stoi(substrings[1]);
-
-            player->username = username.str();
-            boost::trim_right(player->username);  // Remove the trailing \n
+            //player = std::shared_ptr<tbdmud::player>(new tbdmud::player(username.str(), session_id));
+            player = std::shared_ptr<tbdmud::player>(new tbdmud::player(username.str(), session_id, true, substrings[0], std::stoi(substrings[1])));
+            
+            //player->username = username.str();
+            //player->connected = true;
+            //player->ip_address = substrings[0];
+            //player->port = std::stoi(substrings[1]);
 
             std::cout << "User " << player->username << " has connected from " << player->ip_address << ":" << player->port << std::endl << std::endl;
             post("User " + player->username + " has connected.\n");
+
+            std::cout << "Pre-World->Register Character  " << player->get_pc()->get_name() << std::endl;
+            world->register_character(player->get_pc());
 
             async_read();               // Start handling asynchronous command inputs
         }
@@ -126,7 +130,8 @@ private:
         if(!error)
         {
             std::stringstream line;
-            line << player->username << ":  " << std::istream(&streambuf).rdbuf();
+            //line << player->username << ":  " << std::istream(&streambuf).rdbuf();
+            line << std::istream(&streambuf).rdbuf();
             streambuf.consume(bytes_transferred);
 
             on_command(line.str());     // Pass the received line string to the command handler to decode commands and create events
@@ -170,11 +175,12 @@ private:
         }
     }
 
-    tcp::socket socket;                 // The socket for this client
-    io::streambuf streambuf;            // Incoming data
-    std::queue<std::string> outgoing;   // Outgoing messages
-    command_handler on_command;         // Client command handler
-    error_handler   on_error;           // Client error handler
+    tcp::socket socket;                      // The socket for this client
+    io::streambuf streambuf;                 // Incoming data
+    std::queue<std::string> outgoing;        // Outgoing messages
+    command_handler on_command;              // Client command handler
+    error_handler   on_error;                // Client error handler
+    std::shared_ptr<tbdmud::world> world;    // Pointer to the world object in the server
 };
 
 class server
@@ -208,7 +214,7 @@ public:
             std::cout << "Number of connections:  " << num_connections << std::endl;
 
             // Create a reference to the new client's session
-            auto client = std::make_shared<session>(std::move(*socket), num_connections);
+            std::shared_ptr<session> client = std::make_shared<session>(std::move(*socket), num_connections, world);
 
             // Write our welcome message to the new client
             client->post(welcome_msg);
@@ -224,7 +230,7 @@ public:
             (
                 // Pass in the command handler
                 //std::bind(&server::post, this, std::placeholders::_1),
-                std::bind(&server::command_parse, this, std::placeholders::_1),
+                std::bind(&server::command_parse, this, client, std::placeholders::_1),
 
                 // Pass in the error handler (runs on disconnect)
                 [&, client]
@@ -266,36 +272,38 @@ public:
     // Multiple commands can be given on a line, separated by ;
     // Individual command arguments are separated by spaces: <command> <arg1> <arg2>, etc
     // After all explicit commands are checked for, we will check to see if the command matches valid exits from the room
-    void command_parse(std::string const& line)
+    void command_parse(std::shared_ptr<session> client, std::string line)
     {
         const std::string command_delimiters = ";";
         const std::string parameter_delimiters = " ";
         std::vector<std::string> commands;
+        std::shared_ptr<tbdmud::event_queue> eq = client->player->get_pc()->get_event_queue();
 
+        line.pop_back();  // Remove the CR that comes with the line
         boost::split(commands, line, boost::is_any_of(command_delimiters), boost::token_compress_on);  // Split the commands
 
         // Iterate over each command
         for(std::string c : commands) {
+            std::cout << "Parsing command:  " << c << std::endl;
             std::vector<std::string> parameters;
 
             boost::split(parameters, c, boost::is_any_of(parameter_delimiters), boost::token_compress_on);  // Split the parameters
+            std::cout << "split" << std::endl;
 
             if (boost::iequals(parameters.front(), "?")) {
                 std::cout << "Help Requested" << std::endl;
+                client->post("Valid Commands:");
             }
-            if (boost::iequals(parameters.front(), "say")) {
-                tbdmud::event_item mevent;
-                //client->post("Valid Commands:");
+            else if (boost::iequals(parameters.front(), "say")) {
+                std::shared_ptr<tbdmud::event_item> mevent = std::shared_ptr<tbdmud::event_item>(new tbdmud::event_item());
+
+                std::cout << "say eq:  " << eq->name << std::endl;
+                eq->add_event(mevent);
             }
             else {
 
             }
         }
-        
-        //for(auto& client : clients)
-        //{
-        //    client->post(message);
-        //}
     }
 
 private:

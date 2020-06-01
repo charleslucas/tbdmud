@@ -26,18 +26,27 @@ class character {
         // Constructor - Pass in the character's name
         character(std::string n) {
             name = n;
-            std::cout << "Character created w/o eq - name = " << n << std::endl;
+            std::cout << "Character created w/o event queue - name = " << n << std::endl;
         };
 
         // Constructor - Pass in the character's name and a pointer to the event queue
         character(std::string n, std::shared_ptr<event_queue> e) {
             eq = e;
             name = n;
-            std::cout << "Character created w' eq - name = " << n << std::endl;
+            std::cout << "Character created w' event queue - name = " << n << std::endl;
         };
 
         void register_event_queue(std::shared_ptr<event_queue> e) {
             eq = e;
+            std::cout << "Character event queue registered" << std::endl;
+        }
+
+        std::shared_ptr<event_queue> get_event_queue() {
+            return eq;
+        }
+
+        std::string get_name() {
+            return name;
         }
 
         void on_tick() {
@@ -56,9 +65,9 @@ class player {
         std::shared_ptr<character> pc;
 
     public:
+        std::string username;
         int         session_id;
         bool        connected = false;   // The player object may exist for a while after a client disconnects, to see if they reconnect
-        std::string username;
         std::string ip_address;
         int         port;
 
@@ -67,12 +76,35 @@ class player {
 
         // Constructor - Pass in the session ID and character name (currently the same name as the player)
         player(std::string n, uint sid) {
+            username = n;
             session_id = sid;
-            std::cout << "Player created - session = " << session_id << ", name = " << n << std::endl;
+            std::cout << "Player created (short) - session = " << session_id << ", name = " << n << std::endl;
+
+            // For now, when a player connects we automatically create a character with the same name
+            pc = std::shared_ptr<character>(new character(username));
+        };
+
+        // Constructor - Pass in the session ID and character name (currently the same name as the player)
+        player(std::string n, uint sid, bool c, std::string ip, int p) {
+            const char& lastchar = n.back();
+            if (lastchar == '\n') boost::trim_right(n);  // If the username has a trailing \n, remove it
+
+            username   = n;
+            session_id = sid;
+            connected  = c;
+            ip_address = ip;
+            port       = p;
+            std::cout << "Player created (long) - session = " << session_id << ", name = " << n << std::endl;
+
+            // For now, when a player connects we automatically create a character with the same name
             pc = std::shared_ptr<character>(new character(username));
         };
 
         ~player() {}
+
+        std::shared_ptr<character> get_pc() {
+            return pc;
+        }
 };
 
 
@@ -85,11 +117,14 @@ class room {
 
     public:
         // Default Constructor
-        room(){}
+        room(){
+            std::cout << "Room " << name << " constructed w/o event queue" << std::endl;
+        }
     
         room(std::string n, std::shared_ptr<event_queue> e) {
             name = n;
             eq = e;
+            std::cout << "Room " << name << " constructed with event queue:  " << eq->name << std::endl;
         };
 
         // Call on_tick() for all the characters in this room
@@ -100,6 +135,7 @@ class room {
         };
 
         void enter_room(std::shared_ptr<character> c) {
+            std::cout << "Character " << c->get_name() << " entered room " << name << std::endl;
             c->register_event_queue(eq);
             characters.push_back(c);
         };  
@@ -125,11 +161,14 @@ class zone {
 
     public:
         // Default Constructor
-        zone() {};
+        zone() {
+            std::cout << "Zone " << name << " constructed w/o event queue" << std::endl;
+        };
 
         zone(std::string n, std::shared_ptr<event_queue> e) {
             name = n;
             eq = e;
+            std::cout << "Zone " << name << " constructed with event queue:  " << eq->name << std::endl;
             test_init();
         };
 
@@ -171,10 +210,12 @@ class world {
     public:
         // World Constructor
         world() {
+            std::cout << "World Created" << std::endl;
             // Create the event queue with a pointer to the world tick counter
             eq = std::shared_ptr<event_queue>(new event_queue(&current_tick));
+            eq->name = "TBDWorld";
 
-            // TODO:  Test data until we can read it in from a file
+            // TODO:  Hard-coded test data until we can read it in from a file
             zones.push_back(std::shared_ptr<zone>(new zone("The Zone", eq)));
             start_zone = zones.front();
         }
@@ -197,6 +238,7 @@ class world {
 
         // Register a connected character with the room they are starting in
         void register_character(std::shared_ptr<character> c) {
+            std::cout << "world:  registering character " << c->get_name() << std::endl; 
             start_zone->get_start_room()->enter_room(c);
         }
 };
