@@ -259,9 +259,11 @@ public:
         }
     }
 
-    // The different scopes of effect that an event can have
+    // The commands that are valid for a player to use
     enum valid_commands {
         HELP,             // Help message
+        WHO,              // See who is currently logged into the server
+        LOOK,             // Look at the current room and what is in it
         TELL,             // Send a message to a specific player
         SAY,              // Say something to everyone in the current room
         SHOUT,            // Shout to everyone in the zone
@@ -294,11 +296,21 @@ public:
                 std::cout << "Help Requested" << std::endl;
                 client->post("Valid Commands:");
             }
-            else if (boost::iequals(parameters.front(), "say")) {
-                std::shared_ptr<tbdmud::event_item> mevent = std::shared_ptr<tbdmud::event_item>(new tbdmud::event_item());
+            else if (boost::iequals(parameters.front(), "tell")) {
+                std::shared_ptr<tbdmud::event_item> say_event = std::shared_ptr<tbdmud::event_item>(new tbdmud::event_item());
+                say_event->set_type(tbdmud::event_type::SPEAK);
+                say_event->set_message(tbdmud::event_scope::TARGET, "blah");
 
-                std::cout << "say eq:  " << eq->name << std::endl;
-                eq->add_event(mevent);
+                std::cout << "say event:  " << eq->name << std::endl;
+                eq->add_event(say_event);
+            }
+            else if (boost::iequals(parameters.front(), "say")) {
+                std::shared_ptr<tbdmud::event_item> say_event = std::shared_ptr<tbdmud::event_item>(new tbdmud::event_item());
+                say_event->set_type(tbdmud::event_type::SPEAK);
+                say_event->set_message(tbdmud::event_scope::ROOM, "blah");
+
+                std::cout << "say event:  " << eq->name << std::endl;
+                eq->add_event(say_event);
             }
             else {
 

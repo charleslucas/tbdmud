@@ -4,7 +4,16 @@
 namespace tbdmud {
 
 // The different scopes of effect that an event can have
+enum event_type {
+    TYPE_NOT_SET,     // Indicates this value was not set
+    SPEAK,            // A TELL, SAY, SHOUT or BROADCAST event depending on the event_scope
+    MOVE              // Move a character from one room to another
+};
+
+// The different scopes of effect that an event can have
+// (This may or may not be used depending on the event_type)
 enum event_scope {
+    SCOPE_NOT_SET,    // Indicates this value was not set
     WORLD,            // Affects everyone active on the server
     ZONE,             // Affects everyone active in the current zone
     LOCAL,            // Affects everyone in the local area (this room and neighboring rooms)
@@ -16,10 +25,13 @@ enum event_scope {
 class event_item {
     private:
         // These are overridden by the derivative event class or set by the originating entity
-        std::string name = "testname";                                 // Just for logging purposes
-        event_scope scope = WORLD;                         // The scope of the effect of this events 
+        event_type  event_item_type = TYPE_NOT_SET;       // This should be overridden for each created message
+        std::string name = "testname";                    // Just for logging purposes
+        event_scope scope = SCOPE_NOT_SET;                // The scope of the effect of this events 
         std::map<event_scope, std::string> message_map;   // Potential different messages for each scope
         uint relative_tick = 0;                           // Set if the event should happen N ticks from now
+        std::string origin;                               // Name of the originating character, if it was instigated by a character
+        std::string target;                               // Neme of the event target character, if it is an individual (may be the originator)
 
     public:
 
@@ -27,76 +39,48 @@ class event_item {
             return relative_tick;
         };
 
+        void set_type(event_type et) {
+            event_item_type = et;
+        }
+
+        event_type get_type() {
+            return(event_item_type);
+        }
+
+        void set_scope(event_scope es) {
+            scope = es;
+        }
+
+        event_scope get_scope() {
+            return(scope);
+        }
+
+        // Test if a message has been set for a given scope
         bool has_message(event_scope es) {
-            return(false);
+            std::map<event_scope, std::string>::iterator mi = message_map.find(es);
+            
+            return(mi != message_map.end());
         };
 
-        // Return a particular message given the scope
+        // Set a message for a given scope
+        // Note:  This is how you can differentiate between an entry that hasn't been set, vs an entry that was deliberately set to ""
+        void set_message(event_scope es, std::string message) {
+            message_map.insert({es, message});
+            return;
+        };
+
+        // Return the message for that scope
         std::string message(event_scope es) {
-            //TODO:  check that the scope actually exists
-            return message_map[es];
+            std::map<event_scope, std::string>::iterator mi = message_map.find(es);
+            
+            // The map will return a default-constructed string ("") if the entry has not been set
+            return(message_map[es]);
         };
 
-        std::string message() {
-            // A derivative class can select which message scope to return by default
-            return "test";
-        };
-
-};
-
-class tell_event : event_item {
-    private:
-    public:
-
-    void set_message(std::string m) {
-        // Insert into the target scope of the message map
-
-    }
-};
-
-class say_event : event_item {
-    private:
-    public:
-
-    void set_message(std::string m) {
-        // Insert into the room scope of the message map
-
-    }
-};
-
-class shout_event : event_item {
-    private:
-    public:
-
-    void set_message(std::string m) {
-        // Insert into the zone scope of the message map
-        
-    }
-};
-
-class broadcast_event : event_item {
-    private:
-    public:
-
-    void set_message(std::string m) {
-        // Insert into the global scope of the message map
-        
-    }
-};
-
-class message_event : event_item {
-    private:
-        std::string message;
-    public:
-};
-
-class move_event : event_item {
-    private:
-        std::string message;
-    public:
 };
 
 // Wrap a derived event class so we can put different derived event types in the same priority queue
+// TODO:  Figure out how to properly handle different derived classes in the same queue, and how to restore derived types without slicing
 class event_wrapper {
     private:
         // These are set by the event queue
@@ -178,6 +162,7 @@ bool operator> (const event_wrapper& lhs, const event_wrapper& rhs) {
 // A priority queue of event wrappers
 // The wrapper contains data about when the event should be processed
 // The event could be one of a number of derivative event classes
+// TODO:  Figure out how to properly handle different derived classes in the same queue, and how to restore derived types without slicing
 class event_queue {
     private:
         uint64_t*  world_elapsed_ticks;
