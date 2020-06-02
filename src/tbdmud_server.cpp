@@ -296,24 +296,69 @@ public:
                 std::cout << "Help Requested" << std::endl;
                 client->post("Valid Commands:");
             }
+            else if (boost::iequals(parameters.front(), "who")) {
+            }
+            else if (boost::iequals(parameters.front(), "look")) {
+            }
             else if (boost::iequals(parameters.front(), "tell")) {
-                std::shared_ptr<tbdmud::event_item> say_event = std::shared_ptr<tbdmud::event_item>(new tbdmud::event_item());
-                say_event->set_type(tbdmud::event_type::SPEAK);
-                say_event->set_message(tbdmud::event_scope::TARGET, "blah");
+                std::shared_ptr<tbdmud::event_item> tell_event = std::shared_ptr<tbdmud::event_item>(new tbdmud::event_item());
+                tell_event->set_origin(client->player->get_pc()->get_name());
+                tell_event->set_name("TELL");
+                tell_event->set_type(tbdmud::event_type::SPEAK);
+                tell_event->set_scope(tbdmud::event_scope::TARGET);
+                tell_event->set_message(tbdmud::event_scope::TARGET, "TELL");
 
-                std::cout << "say event:  " << eq->name << std::endl;
-                eq->add_event(say_event);
+                std::cout << "tell event:  " << tell_event->get_name() << std::endl;
+                eq->add_event(tell_event);
             }
             else if (boost::iequals(parameters.front(), "say")) {
                 std::shared_ptr<tbdmud::event_item> say_event = std::shared_ptr<tbdmud::event_item>(new tbdmud::event_item());
+                say_event->set_origin(client->player->get_pc()->get_name());
+                say_event->set_name("SAY");
                 say_event->set_type(tbdmud::event_type::SPEAK);
-                say_event->set_message(tbdmud::event_scope::ROOM, "blah");
+                say_event->set_scope(tbdmud::event_scope::ROOM);
+                say_event->set_message(tbdmud::event_scope::ROOM, "SAY");
 
-                std::cout << "say event:  " << eq->name << std::endl;
+                std::cout << "say event:  " << say_event->get_name() << std::endl;
                 eq->add_event(say_event);
             }
-            else {
+            // TODO:  Remove temporary command "say with delay" for testing event delays
+            else if (boost::iequals(parameters.front(), "dsay")) {
+                std::shared_ptr<tbdmud::event_item> dsay_event = std::shared_ptr<tbdmud::event_item>(new tbdmud::event_item());
+                dsay_event->set_origin(client->player->get_pc()->get_name());
+                dsay_event->set_name("DSAY");
+                dsay_event->set_rtick(5);
+                dsay_event->set_type(tbdmud::event_type::SPEAK);
+                dsay_event->set_scope(tbdmud::event_scope::ROOM);
+                dsay_event->set_message(tbdmud::event_scope::ROOM, "SAY");
 
+                std::cout << "dsay event:  " << dsay_event->get_name() << std::endl;
+                eq->add_event(dsay_event);
+            }
+            else if (boost::iequals(parameters.front(), "shout")) {
+                std::shared_ptr<tbdmud::event_item> shout_event = std::shared_ptr<tbdmud::event_item>(new tbdmud::event_item());
+                shout_event->set_origin(client->player->get_pc()->get_name());
+                shout_event->set_name("SHOUT");
+                shout_event->set_type(tbdmud::event_type::SPEAK);
+                shout_event->set_scope(tbdmud::event_scope::ZONE);
+                shout_event->set_message(tbdmud::event_scope::ZONE, "SHOUT");
+
+                std::cout << "shout event:  " << shout_event->get_name() << std::endl;
+                eq->add_event(shout_event);
+            }
+            else if (boost::iequals(parameters.front(), "broadcast")) {
+                std::shared_ptr<tbdmud::event_item> broadcast_event = std::shared_ptr<tbdmud::event_item>(new tbdmud::event_item());
+                broadcast_event->set_origin(client->player->get_pc()->get_name());
+                broadcast_event->set_name("BROADCAST");
+                broadcast_event->set_type(tbdmud::event_type::SPEAK);
+                broadcast_event->set_scope(tbdmud::event_scope::WORLD);
+                broadcast_event->set_message(tbdmud::event_scope::ZONE, "BROADCAST");
+
+                std::cout << "broadcast event:  " << broadcast_event->get_name() << std::endl;
+                eq->add_event(broadcast_event);
+            }
+            else {
+                // TODO:  See if parameters.front() equals one of the defined exits from the room
             }
         }
     }

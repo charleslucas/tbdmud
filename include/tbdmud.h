@@ -251,7 +251,33 @@ class world {
                 //std::cout << "Got null event" << std::endl; 
             }
             else {
-                std::cout << "Got event named " << event->get_name() << std::endl;
+                switch(event->get_type()) {
+                    case SPEAK:
+                        switch(event->get_scope()) {
+                            case TARGET:
+                                std::cout << "Got TELL event:  " << event->get_name() << std::endl;
+                                break;
+                            case ROOM:
+                                std::cout << "Got SAY event:  " << event->get_name() << std::endl;
+                                break;
+                            case ZONE:
+                                std::cout << "Got SHOUT event:  " << event->get_name() << std::endl;
+                                break;
+                            case WORLD:
+                                std::cout << "Got BROADCAST event:  " << event->get_name() << std::endl;
+                                break;
+                            default:
+                                std::cout << "Got unknown SPEAK event:  " << event->get_name() << std::endl;
+                                break;
+                        }
+                        break;
+                    case MOVE:
+                        std::cout << "Got MOVE event:  " << event->get_name() << std::endl;
+                        break;
+                    default:
+                        std::cout << "Got unknown event:  " << event->get_name() << std::endl;
+                        break;
+                }
             }
         }
 };

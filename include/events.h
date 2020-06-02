@@ -35,7 +35,11 @@ class event_item {
 
     public:
 
-        uint rtick() {
+        void set_rtick(uint r) {
+            relative_tick = r;
+        };
+
+        uint get_rtick() {
             return relative_tick;
         };
 
@@ -85,6 +89,22 @@ class event_item {
             return(message_map[es]);
         };
 
+        void set_origin(std::string o) {
+            origin = o;
+        }
+
+        std::string get_origin() {
+            return origin;
+        }
+
+        void set_target(std::string t) {
+            target = t;
+        }
+
+        std::string get_target() {
+            return target;
+        }
+
 };
 
 // Wrap a derived event class so we can put different derived event types in the same priority queue
@@ -131,20 +151,20 @@ class event_wrapper {
 
         // Overload operators
         bool operator< (const event_wrapper& other) {
-            if (event->rtick() == other.event->rtick())  {
+            if (event->get_rtick() == other.event->get_rtick())  {
                 if (unique_id < other.unique_id) return true;
                 else return false;
             }
-            else if (event->rtick() < other.event->rtick()) return true;
+            else if (event->get_rtick() < other.event->get_rtick()) return true;
             else return false;
         };
 
         bool operator> (const event_wrapper& other) {
-            if (event->rtick() == other.event->rtick())  {
+            if (event->get_rtick() == other.event->get_rtick())  {
                 if (unique_id > other.unique_id) return true;
                 else return false;
             }
-            else if (event->rtick() > other.event->rtick()) return true;
+            else if (event->get_rtick() > other.event->get_rtick()) return true;
             else return false;
         }
 
@@ -154,21 +174,21 @@ class event_wrapper {
 
 // Overloaded < operator for priority queue event comparisons
 bool operator< (const event_wrapper& lhs, const event_wrapper& rhs) {
-    if (lhs.event->rtick() == rhs.event->rtick())  {
+    if (lhs.event->get_rtick() == rhs.event->get_rtick())  {
         if (lhs.unique_id < rhs.unique_id) return true;
         else return false;
     }
-    else if (lhs.event->rtick() < rhs.event->rtick()) return true;
+    else if (lhs.event->get_rtick() < rhs.event->get_rtick()) return true;
     else return false;
 };
 
 // Overloaded > operator for priority queue event comparisons
 bool operator> (const event_wrapper& lhs, const event_wrapper& rhs) {
-    if (lhs.event->rtick() == rhs.event->rtick())  {
+    if (lhs.event->get_rtick() == rhs.event->get_rtick())  {
         if (lhs.unique_id > rhs.unique_id) return true;
         else return false;
     }
-    else if (lhs.event->rtick() > rhs.event->rtick()) return true;
+    else if (lhs.event->get_rtick() > rhs.event->get_rtick()) return true;
     else return false;
 };
 
@@ -201,15 +221,16 @@ class event_queue {
             event_wrapper ew;
             uint ec;
             
-            std::cout << "Add event" << std::endl;
+            std::cout << "Add event " << e->get_name() << std::endl;
             ec = event_counter;
+
             std::cout << "Set ID:  " << event_counter << std::endl; 
             ew.set_id(event_counter);
             event_counter++;
 
             // Set the world-relative tick that this event will trigger on
-            std::cout << "Set STick:  " << *world_elapsed_ticks << " + " << e->rtick() << std::endl; 
-            ew.set_stick(*world_elapsed_ticks + e->rtick());
+            std::cout << "Set s-tick:  " << *world_elapsed_ticks << " + " << e->get_rtick() << std::endl; 
+            ew.set_stick(*world_elapsed_ticks + e->get_rtick());
 
             std::cout << "Set Event" << std::endl; 
             ew.set_event(e);
