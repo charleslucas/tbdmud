@@ -286,11 +286,12 @@ public:
 
         // Iterate over each command
         for(std::string c : commands) {
+            std::vector<std::string>           parameters;
+            std::vector<std::string>::iterator i;
+
             std::cout << "Parsing command:  " << c << std::endl;
-            std::vector<std::string> parameters;
 
             boost::split(parameters, c, boost::is_any_of(parameter_delimiters), boost::token_compress_on);  // Split the parameters
-            std::cout << "split" << std::endl;
 
             if (boost::iequals(parameters.front(), "?")) {
                 std::cout << "Help Requested" << std::endl;
@@ -306,9 +307,35 @@ public:
                 tell_event->set_name("TELL");
                 tell_event->set_type(tbdmud::event_type::SPEAK);
                 tell_event->set_scope(tbdmud::event_scope::TARGET);
-                tell_event->set_message(tbdmud::event_scope::TARGET, "TELL");
 
-                std::cout << "tell event:  " << tell_event->get_name() << std::endl;
+                //TODO:  Check if the target player is connected
+                std::shared_ptr<session> target;
+                bool match = false;
+                for(auto& c : clients)
+                {
+                    if(c->player->get_pc()->get_name() == parameters[1]) {
+                        tell_event->set_target(parameters[1]);
+                        match = true;
+                    }
+                }
+
+                if (match == false) {
+                    std::string error = "Player " + parameters[1] + " is not connected.\n"; 
+                    client->post(error);
+                    return;
+                }
+
+                // Chop the first and second words off the string, keep the rest as the message
+                for (int j = 0; j < 2; j++) {
+                    size_t space = c.find(" ");    
+                    if (space != std::string::npos) {
+                      c = c.substr(space + 1);
+                    }
+                }
+
+                tell_event->set_message(tbdmud::event_scope::TARGET, c);
+
+                std::cout << "tell event to :  " << tell_event->get_target() << " : " << tell_event->get_message(tbdmud::event_scope::TARGET) << std::endl;
                 eq->add_event(tell_event);
             }
             else if (boost::iequals(parameters.front(), "say")) {
@@ -317,7 +344,13 @@ public:
                 say_event->set_name("SAY");
                 say_event->set_type(tbdmud::event_type::SPEAK);
                 say_event->set_scope(tbdmud::event_scope::ROOM);
-                say_event->set_message(tbdmud::event_scope::ROOM, "SAY");
+
+                // Chop the first word off the string, keep the rest as the message
+                size_t space = c.find(" ");    
+                if (space != std::string::npos) {
+                  c = c.substr(space + 1);
+                }
+                say_event->set_message(tbdmud::event_scope::ROOM, c);
 
                 std::cout << "say event:  " << say_event->get_name() << std::endl;
                 eq->add_event(say_event);
@@ -330,7 +363,13 @@ public:
                 dsay_event->set_rtick(5);
                 dsay_event->set_type(tbdmud::event_type::SPEAK);
                 dsay_event->set_scope(tbdmud::event_scope::ROOM);
-                dsay_event->set_message(tbdmud::event_scope::ROOM, "SAY");
+
+                // Chop the first word off the string, keep the rest as the message
+                size_t space = c.find(" ");    
+                if (space != std::string::npos) {
+                  c = c.substr(space + 1);
+                }
+                dsay_event->set_message(tbdmud::event_scope::ROOM, c);
 
                 std::cout << "dsay event:  " << dsay_event->get_name() << std::endl;
                 eq->add_event(dsay_event);
@@ -341,7 +380,13 @@ public:
                 shout_event->set_name("SHOUT");
                 shout_event->set_type(tbdmud::event_type::SPEAK);
                 shout_event->set_scope(tbdmud::event_scope::ZONE);
-                shout_event->set_message(tbdmud::event_scope::ZONE, "SHOUT");
+
+                // Chop the first word off the string, keep the rest as the message
+                size_t space = c.find(" ");    
+                if (space != std::string::npos) {
+                  c = c.substr(space + 1);
+                }
+                shout_event->set_message(tbdmud::event_scope::ZONE, c);
 
                 std::cout << "shout event:  " << shout_event->get_name() << std::endl;
                 eq->add_event(shout_event);
@@ -352,7 +397,13 @@ public:
                 broadcast_event->set_name("BROADCAST");
                 broadcast_event->set_type(tbdmud::event_type::SPEAK);
                 broadcast_event->set_scope(tbdmud::event_scope::WORLD);
-                broadcast_event->set_message(tbdmud::event_scope::ZONE, "BROADCAST");
+
+                // Chop the first word off the string, keep the rest as the message
+                size_t space = c.find(" ");    
+                if (space != std::string::npos) {
+                  c = c.substr(space + 1);
+                }
+                broadcast_event->set_message(tbdmud::event_scope::ZONE, c);
 
                 std::cout << "broadcast event:  " << broadcast_event->get_name() << std::endl;
                 eq->add_event(broadcast_event);

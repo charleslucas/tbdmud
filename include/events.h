@@ -82,7 +82,7 @@ class event_item {
         };
 
         // Return the message for that scope
-        std::string message(event_scope es) {
+        std::string get_message(event_scope es) {
             std::map<event_scope, std::string>::iterator mi = message_map.find(es);
             
             // The map will return a default-constructed string ("") if the entry has not been set
@@ -235,8 +235,7 @@ class event_queue {
             std::cout << "Set Event" << std::endl; 
             ew.set_event(e);
             
-            std::cout << "Push" << std::endl; 
-            event_pq.push(ew);
+            event_pq.push(ew);  // Push the event into the priority queue
         };
 
         // Return the most current event

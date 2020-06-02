@@ -255,16 +255,16 @@ class world {
                     case SPEAK:
                         switch(event->get_scope()) {
                             case TARGET:
-                                std::cout << "Got TELL event:  " << event->get_name() << std::endl;
+                                std::cout << "Got TELL to " << event->get_target() << ":  " << event->get_message(TARGET);
                                 break;
                             case ROOM:
-                                std::cout << "Got SAY event:  " << event->get_name() << std::endl;
+                                std::cout << "Got SAY event:  " << event->get_message(ROOM) << std::endl;
                                 break;
                             case ZONE:
-                                std::cout << "Got SHOUT event:  " << event->get_name() << std::endl;
+                                std::cout << "Got SHOUT event:  " << event->get_message(ZONE) << std::endl;
                                 break;
                             case WORLD:
-                                std::cout << "Got BROADCAST event:  " << event->get_name() << std::endl;
+                                std::cout << "Got BROADCAST event:  " << event->get_message(WORLD) << std::endl;
                                 break;
                             default:
                                 std::cout << "Got unknown SPEAK event:  " << event->get_name() << std::endl;
