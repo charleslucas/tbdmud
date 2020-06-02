@@ -63,13 +63,13 @@ class character {
 class player {
     private:
         std::shared_ptr<character> pc;
-
-    public:
         std::string username;
         int         session_id;
         bool        connected = false;   // The player object may exist for a while after a client disconnects, to see if they reconnect
         std::string ip_address;
         int         port;
+
+    public:
 
         // Default Constructor
         player() {}
@@ -102,8 +102,32 @@ class player {
 
         ~player() {}
 
+        void set_character(std::shared_ptr<character> c) {
+            pc = c;
+        }
+
         std::shared_ptr<character> get_character() {
             return pc;
+        }
+
+        std::string get_name() {
+            return username;
+        }
+
+        void set_connected(bool c) {
+            connected = c;
+        }
+
+        bool is_connected() {
+            return connected;
+        }
+
+        std::string get_ip() {
+            return ip_address;
+        }
+
+        int get_port() {
+            return port;
         }
 };
 

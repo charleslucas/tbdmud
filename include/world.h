@@ -43,12 +43,33 @@ class world {
             }
         };
 
-        // Register a connected character with the room they are starting in
+        // Create a new character and put them in the starting room
+        std::shared_ptr<character> create_character(session* client, std::string name) {
+            std::cout << "world:  creating new character " << std::endl;
+            std::shared_ptr<character> c = std::shared_ptr<character>(new character(name));
+
+            char_to_client_map.insert({name, client});
+            start_zone->get_start_room()->enter_room(c);
+
+            return c;
+        }
+
+        // Register an existing character and put them in the starting room
+        // TODO:  Put them in the room they logged out in
         void register_character(session* client, std::shared_ptr<character> c) {
             std::cout << "world:  registering character " << c->get_name() << std::endl;
 
             char_to_client_map.insert({c->get_name(), client});
             start_zone->get_start_room()->enter_room(c);
+        }
+
+        // Delete a character - remove them from the room they are in and other cleanup
+        void remove_character(std::string character_name) {
+            std::cout << "world:  removing character " << character_name << std::endl;
+
+            char_to_client_map.erase(character_name);
+            //start_zone->get_start_room()->enter_room(c);
+            // TODO:  Remove from room
         }
 
         void process_events() {

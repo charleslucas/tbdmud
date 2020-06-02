@@ -20,7 +20,9 @@ private:
     std::unordered_set<std::shared_ptr<session>> clients;   // A set of connected clients
     tbdmud::world* world;                                   // Pointer to the world object in the server
     std::vector<tbdmud::player> players;                    // Server tracks a list of players, but the session adds/removes from the vector
-    std::function<void(session*, std::shared_ptr<tbdmud::character>)> register_character;  // Create a function pointer to the world's register_character function to pass to session objects
+    std::function<std::shared_ptr<tbdmud::character>(session*, std::string)> create_character;  // Create a function pointer to the world's create_character function to pass to session objects
+    std::function<void(session*, std::shared_ptr<tbdmud::character>)>      register_character;  // Create a function pointer to the world's register_character function to pass to session objects
+    std::function<void(std::string)>                                       remove_character;  // Create a function pointer to the world's register_character function to pass to session objects
 
 public:
 
@@ -37,7 +39,9 @@ public:
         world = world_ptr;  // Store a point to the world object
 
         // Create a function pointer to the world's register_character function to pass to session objects
+          create_character = std::bind(&tbdmud::world::create_character  , world, std::placeholders::_1, std::placeholders::_2);
         register_character = std::bind(&tbdmud::world::register_character, world, std::placeholders::_1, std::placeholders::_2);
+          remove_character = std::bind(&tbdmud::world::remove_character,   world, std::placeholders::_1);
     }
 
     void async_accept()
@@ -53,8 +57,8 @@ public:
             num_connections++;
             std::cout << "Number of connections:  " << num_connections << std::endl;
 
-            // Create a reference to the new client's session
-            std::shared_ptr<session> client = std::make_shared<session>(std::move(*socket), num_connections, register_character);
+            // Create the new client's session
+            std::shared_ptr<session> client = std::make_shared<session>(std::move(*socket), num_connections, create_character);
 
             // Write our welcome message to the new client
             client->post(welcome_msg);
@@ -75,11 +79,13 @@ public:
                 // Pass in the error handler (runs on disconnect)
                 [&, client]
                 {
-                    const std::string username = client->get_player()->username;  // Copy the name before we delete the client
+                    const std::string character_name = client->get_player()->get_character()->get_name();  // Copy the name before we delete the client
 
                     if(clients.erase(client))
                     {
-                        post(username + " has disconnected.\n\r");
+                        post(character_name + " has disconnected.\n\r");
+                        remove_character(character_name);  // Remove the character from the world
+
                         num_connections--;
                         std::cout << "Number of connections:  " << num_connections << std::endl;
                     }

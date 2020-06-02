@@ -28,7 +28,8 @@ private:
     uint session_id = 0;
     std::shared_ptr<tbdmud::player>  player;     // Once a client has been authenticated they will populate the player data from file
                                                  // This session creates the player object, but the server will own it
-    std::function<void(session*, std::shared_ptr<tbdmud::character>)> register_character;  // A function pointer to the world's register_character function to pass to session objects
+    //std::function<void(session*, std::shared_ptr<tbdmud::character>)> register_character;  // A function pointer to the world's register_character function to pass to session objects
+    std::function<std::shared_ptr<tbdmud::character>(session*, std::string)> create_character;  // A function pointer to the world's register_character function to pass to session objects
 
     void async_login_username() {
         const std::string login_prompt = "Enter username or \"new\": --> ";
@@ -72,19 +73,19 @@ private:
             // This session creates the player object, but the server will own it
             player = std::shared_ptr<tbdmud::player>(new tbdmud::player(username.str(), session_id, true, substrings[0], std::stoi(substrings[1])));
             
-            std::cout << "User " << player->username << " has connected from " << player->ip_address << ":" << player->port << std::endl << std::endl;
-            post("User " + player->username + " has connected.\n");
+            std::cout << "User " << player->get_name() << " has connected from " << player->get_ip() << ":" << player->get_port() << std::endl << std::endl;
+            post("User " + player->get_name() + " has connected.\n");
 
-            //std::cout << "World->Register Character  " << player->get_character()->get_name() << std::endl;
-            //world->register_character(this, player->get_character());
-            register_character(this, player->get_character());
+            std::cout << "Session->Creating new character " << player->get_name() << std::endl;
+            //register_character(this, player->get_character());
+            player->set_character(create_character(this, player->get_name()));
 
             async_read();               // Start handling asynchronous command inputs
         }
         else
         {
             // Call the error handler, then exit
-            player->connected = false;
+            player->set_connected(false);
             socket.close(error);
             on_error();
         }
@@ -144,10 +145,10 @@ private:
 public:
 
     // Constructor - initialize our internal socket from the passed-in socket
-    session(tcp::socket&& socket, uint sid, std::function<void(session*, std::shared_ptr<tbdmud::character>)> rc) : socket(std::move(socket))
+    session(tcp::socket&& socket, uint sid, std::function<std::shared_ptr<tbdmud::character>(session*, std::string)> cc) : socket(std::move(socket))
     {
         session_id = sid;
-        register_character = rc;
+        create_character = cc;
     }
 
     // Register the passed-in message and error handler functions to the session object, start asynchronous socket reads
