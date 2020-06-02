@@ -241,6 +241,19 @@ class world {
             std::cout << "world:  registering character " << c->get_name() << std::endl; 
             start_zone->get_start_room()->enter_room(c);
         }
+
+        void process_events() {
+            std::shared_ptr<event_item> event;
+
+            event = eq->next_event();
+
+            if (event == nullptr) {
+                //std::cout << "Got null event" << std::endl; 
+            }
+            else {
+                std::cout << "Got event named " << event->get_name() << std::endl;
+            }
+        }
 };
 
 }  // end namespace tbdmud

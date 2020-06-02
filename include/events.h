@@ -39,6 +39,14 @@ class event_item {
             return relative_tick;
         };
 
+        void set_name(std::string n) {
+            name = n;
+        }
+
+        std::string get_name() {
+            return name;
+        }
+
         void set_type(event_type et) {
             event_item_type = et;
         }
@@ -108,12 +116,17 @@ class event_wrapper {
             return unique_id;
         }
 
+        // Get the world-relative tick when this event will be valid
         uint64_t stick() {
             return scheduled_tick;
         }
 
         void set_event(std::shared_ptr<event_item> e) {
             event = e;
+        }
+
+        std::shared_ptr<event_item> get_event() {
+            return(event);
         }
 
         // Overload operators
@@ -165,8 +178,8 @@ bool operator> (const event_wrapper& lhs, const event_wrapper& rhs) {
 // TODO:  Figure out how to properly handle different derived classes in the same queue, and how to restore derived types without slicing
 class event_queue {
     private:
-        uint64_t*  world_elapsed_ticks;
-        uint       event_counter;
+        uint64_t*                          world_elapsed_ticks;
+        uint                               event_counter;
         std::priority_queue<event_wrapper> event_pq;
 
     public:
@@ -190,29 +203,38 @@ class event_queue {
             
             std::cout << "Add event" << std::endl;
             ec = event_counter;
-            //std::cout << "Set ID:  " << event_counter << std::endl; 
-            //ew.set_id(event_counter);
-            //event_counter++;
+            std::cout << "Set ID:  " << event_counter << std::endl; 
+            ew.set_id(event_counter);
+            event_counter++;
 
             // Set the world-relative tick that this event will trigger on
-//            std::cout << "Set STick:  " << *world_elapsed_ticks << " + " << e->rtick() << std::endl; 
-//            ew.set_stick(*world_elapsed_ticks + e->rtick());
-//
-//            std::cout << "Set Event" << std::endl; 
-//            ew.set_event(e);
-//            
-//            std::cout << "Push" << std::endl; 
-//            event_pq.push(ew);
+            std::cout << "Set STick:  " << *world_elapsed_ticks << " + " << e->rtick() << std::endl; 
+            ew.set_stick(*world_elapsed_ticks + e->rtick());
+
+            std::cout << "Set Event" << std::endl; 
+            ew.set_event(e);
+            
+            std::cout << "Push" << std::endl; 
+            event_pq.push(ew);
         };
 
         // Return the most current event
-        event_wrapper get_event() {
+        std::shared_ptr<event_item> next_event() {
             event_wrapper ew;
 
-            ew = event_pq.top();
-            event_pq.pop();
+            // If the queue has something in it, *AND*
+            if (!event_pq.empty()) {
+                ew = event_pq.top();
 
-            return ew;
+                // If the topmost item in the priority queue has a time equal to or less than now
+                if(ew.stick() <= *world_elapsed_ticks) {
+                    event_pq.pop();           // Pop it off the queue and return it
+                    return ew.get_event();
+                }
+            }
+
+            // Otherwise, if we didn't pop an event off the queue, just return null
+            return nullptr;
         };
 
 };
