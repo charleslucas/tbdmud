@@ -28,8 +28,8 @@ private:
     uint session_id = 0;
     std::shared_ptr<tbdmud::player>  player;     // Once a client has been authenticated they will populate the player data from file
                                                  // This session creates the player object, but the server will own it
+    std::function<std::shared_ptr<tbdmud::character>(session*, std::string)> create_character;  // A function pointer to the world's create_character function to pass to session objects
     //std::function<void(session*, std::shared_ptr<tbdmud::character>)> register_character;  // A function pointer to the world's register_character function to pass to session objects
-    std::function<std::shared_ptr<tbdmud::character>(session*, std::string)> create_character;  // A function pointer to the world's register_character function to pass to session objects
 
     void async_login_username() {
         const std::string login_prompt = "Enter username or \"new\": --> ";
