@@ -6,7 +6,8 @@ namespace tbdmud {
 // The different scopes of effect that an event can have
 enum event_type {
     TYPE_NOT_SET,     // Indicates this value was not set
-    SPEAK,            // A TELL, SAY, SHOUT or BROADCAST event depending on the event_scope
+    NOTICE,           // World broadcast messages - recipients depend on scope
+    SPEAK,            // Player speaking event - TELL, SAY, SHOUT or BROADCAST event depending on the event_scope
     MOVE              // Move a character from one room to another
 };
 
@@ -236,20 +237,24 @@ class event_queue {
             event_wrapper ew;
             uint ec;
             
+            #ifdef DEBUG
             std::cout << "Add event " << e->get_name() << std::endl;
+            #endif
             ec = event_counter;
 
-            std::cout << "Set ID:  " << event_counter << std::endl; 
+            #ifdef DEBUG
+            std::cout << "Set Event ID:  " << event_counter << std::endl; 
+            #endif
             ew.set_id(event_counter);
             event_counter++;
 
             // Set the world-relative tick that this event will trigger on
-            std::cout << "Set s-tick:  " << *world_elapsed_ticks << " + " << e->get_rtick() << std::endl; 
+            #ifdef DEBUG
+            std::cout << "Set event system tick to trigger on:  " << *world_elapsed_ticks << " + " << e->get_rtick() << std::endl; 
+            #endif
             ew.set_stick(*world_elapsed_ticks + e->get_rtick());
 
-            std::cout << "Set Event" << std::endl; 
-            ew.set_event(e);
-            
+            ew.set_event(e);    // Attach the event object to this wrapper
             event_pq.push(ew);  // Push the event into the priority queue
         };
 

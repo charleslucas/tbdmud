@@ -24,6 +24,10 @@ class world {
         std::shared_ptr<zone>                         start_zone;          // The default zone that new players should start in
         std::shared_ptr<event_queue>                  eq;
 
+        // World States
+        bool state_sun = false;   // Is the sun up?
+        bool state_moon = false;  // Is the moon up?
+
     public:
         // World Constructor
         // In the beginning....
@@ -34,27 +38,27 @@ class world {
             eq->name = "TBDWorld";
 
             // TODO:  Hard-coded test data until we can read it in from a file
-            zones.insert({"The Zone", std::shared_ptr<zone>(new zone("The Zone", eq))});
-            start_zone = zones["The Zone"];
+            zones.insert({"Zion", std::shared_ptr<zone>(new zone("Zion", eq))});
+            start_zone = zones["Zion"];
         };
 
-        // World Destructor (Vogons?)
+        // World Destructor (Here there be Vogons)
         ~world() {}
 
         // This function should be triggered asynchronously by the server, approximately every second
-        // (We're not going to synchronize to real world time)
+        // (We're not synchronizing to real world time)
         void tick() {
-            std::cout << "tick " << current_tick << std::endl;
+            if (current_tick % 100 == 0) std::cout << "tick " << current_tick << std::endl;
             current_tick++;
-            //event_queue.on_tick();
 
-            // Call on_tick() for all the zones in this world
+            // Call on_tick() for all the zones in this world, who will call it on all the rooms, who will call it on all the characters/objects
             std::map<std::string, std::shared_ptr<zone>>::iterator z = zones.begin();
-
             while (z != zones.end()) {
                 z->second->on_tick();
                 z++;
             }
+
+            periodic_events(current_tick);   // After processing the tick see if there are periodic world events to handle/create
         };
 
         std::shared_ptr<zone> find_zone(std::string z) {
@@ -107,161 +111,61 @@ class world {
             // TODO:  Remove from room
         };
 
-        void process_events() {
-            // Grab the event at the top of the event queue
-            std::shared_ptr<event_item>        event = eq->next_event();
-            if (event == nullptr) return;  // The queue will return nullptr if there are no events that need processing
+        /***********************************************************************************************
+         * PERIODIC EVENTS
+         * Create periodic events that happen in the world
+         ***********************************************************************************************/  
+        void periodic_events(int current_tick) {
 
-            std::string                origin_name      = event->get_origin();
-            session*                   origin_client    = nullptr;
-            std::shared_ptr<character> origin_char      = nullptr;
-            std::shared_ptr<zone>      origin_zone      = nullptr;
-            std::string                origin_room_name = event->get_origin_room();
-            std::shared_ptr<room>      origin_room      = nullptr; 
-            std::string                target_name      = event->get_target();
-            session*                   target_client    = nullptr;
-            std::shared_ptr<character> target_char      = nullptr;
-            std::shared_ptr<zone>      target_zone      = nullptr; 
-            std::string                target_room_name = event->get_target_room();
-            std::shared_ptr<room>      target_room      = nullptr; 
-            std::string                message;
-            std::map<std::string, session*>::iterator  ch;
-
-            // TODO:  develop a better way to get the character pointer given the character name
-            if (origin_name != "") {
-                origin_char = char_to_client_map[origin_name]->get_player()->get_character();
-                origin_client = char_to_client_map[origin_name];
-            }
-
-            if (event == nullptr) {
-                //std::cout << "Got null event" << std::endl; 
-            }
-            else {
-                switch(event->get_type()) {
-                    case SPEAK:
-                        switch(event->get_scope()) {
-                            case TARGET:
-                                if ((origin_name != "") && (target_name != "")) {
-                                    std::cout << "Got TELL to " << target_name << ":  " << event->get_message(TARGET);
-                                    target_char = char_to_client_map[target_name]->get_player()->get_character();
-                                    target_client = char_to_client_map[target_name];
-
-                                    // Write the messages out to the origin and target clients
-                                    if (target_client != nullptr) {
-                                        target_client->post("\n" + origin_name + " tells you: " + event->get_message(TARGET) + "\n\n");
-                                    }
-                                    if (origin_client != nullptr) {
-                                        origin_client->post("\nYou tell " + target_name + ":  " + event->get_message(TARGET) + "\n\n");
-                                    }
-                                }
-                                else {
-                                    std::cout << "Malformed TELL event\n" << std::endl;
-                                }
-
-                                break;
-                            case ROOM:
-                                message = event->get_message(event_scope::ROOM);
-                                std::cout << "Got SAY event:  " << message << std::endl;
-
-                                origin_room = find_room(origin_char->get_current_zone(), origin_char->get_current_room());
-                                
-                                // Broadcast to everyone else in the room what the origin player said
-                                for (std::shared_ptr<character> ch : origin_room->get_characters()) {
-                                    if (ch->get_name() != origin_name) {
-                                        char_to_client_map[ch->get_name()]->post("\n" + origin_name + " says:  " + message + "\n\n");
-                                    }
-                                    else {
-                                        origin_client->post("\nYou say:  " + message + "\n\n");
-                                    }
-                                }
-
-                                break;
-                            case ZONE:
-                                message = event->get_message(event_scope::ZONE);
-                                std::cout << "Got SHOUT event:  " << message << std::endl;
-
-                                origin_zone = find_zone(origin_char->get_current_zone());
-                                
-                                // Broadcast to everyone else in the room what the origin player said
-                                for (std::shared_ptr<character> ch : origin_zone->get_characters()) {
-                                    if (ch->get_name() != origin_name) {
-                                        char_to_client_map[ch->get_name()]->post("\n" + origin_name + " shouts:  " + message + "\n\n");
-                                    }
-                                    else {
-                                        origin_client->post("\nYou shout:  " + message + "\n\n");
-                                    }
-                                }
-
-                                break;
-                            case WORLD:
-                                message = event->get_message(event_scope::WORLD);
-                                std::cout << "Got BROADCAST event:  " << message << std::endl;
-
-                                // Broadcast to everyone else in the room what the origin player said
-                                ch = char_to_client_map.begin();
-                                while (ch != char_to_client_map.end()) {
-                                    std::string target_name = ch->first;
-                                    if (target_name != origin_name) {
-                                        ch->second->post("\n" + origin_name + " broadcasts:  " + message + "\n\n");
-                                    }
-                                    else {
-                                        origin_client->post("\nYou broadcast:  " + message + "\n\n");
-                                    }
-                                    ch++;
-                                }
-
-                                break;
-                            default:
-                                std::cout << "Got unknown SPEAK event:  " << event->get_name() << std::endl;
-                                break;
-                        }
-                        break;
-                    case MOVE:
-                        if (origin_room_name != "" && target_room_name != "") {
-                            // TODO:  Handle moving from one zone to another
-                            //origin_zone = find_zone(origin_char->get_current_zone());
-                            origin_room = find_room(origin_char->get_current_zone(), origin_room_name);
-                            target_room = find_room(origin_char->get_current_zone(), target_room_name);
-                        
-                            origin_room->leave_room(origin_char);
-                            // Broadcast to everyone else in the origin room that the player left
-                            for (std::shared_ptr<character> ch : origin_room->get_characters()) {
-                                if (ch->get_name() != origin_name) {
-                                    char_to_client_map[ch->get_name()]->post("\n" + origin_name + " left the room towards " + target_room_name + "\n\n");
-                                }
-                                else {
-                                    origin_client->post("\nYou left the room\n\n");
-                                }
-                            }
-
-                            target_room->enter_room(origin_char);
-                            // Broadcast to everyone else in the target room that the player left
-                            for (std::shared_ptr<character> ch : target_room->get_characters()) {
-                                if (ch->get_name() != origin_name) {
-                                    char_to_client_map[ch->get_name()]->post("\n" + origin_name + " has entered the room\n\n");
-                                }
-                                else {
-                                    origin_client->post("\nYou have entered " + origin_room_name + "\n\n");
-                                }
-                            }
-
-                            std::cout << "Got MOVE event:  " << event->get_name() << std::endl;
-                        }
-                        else {
-                            std::cout << "Malformed MOVE event\n" << std::endl;
-                        }
-                        break;
-                    default:
-                        std::cout << "Got unknown event:  " << event->get_name() << std::endl;
-                        break;
+            // Periodically make the sun rise or set
+            if (current_tick % 42 == 0) {
+                std::shared_ptr<tbdmud::event_item> sun_event = std::shared_ptr<tbdmud::event_item>(new tbdmud::event_item());
+                sun_event->set_origin("world");  // TODO:  pick something that doesn't mess up if a character names themselves that
+                sun_event->set_name("SUN");
+                sun_event->set_type(tbdmud::event_type::NOTICE);
+                sun_event->set_scope(tbdmud::event_scope::WORLD);
+                if (!state_sun) {
+                    sun_event->set_message(tbdmud::event_scope::WORLD, "The sun rises");
+                    state_sun = true;
                 }
-            }
-        };
-            
-        // Decode commands given by the client, create events and put them in the queue
-        // Multiple commands can be given on a line, separated by ;
-        // Individual command arguments are separated by spaces: <command> <arg1> <arg2>, etc
-        // After all explicit commands are checked for, we will check to see if the command matches valid exits from the room
+                else {
+                    sun_event->set_message(tbdmud::event_scope::WORLD, "The sun sets");
+                    state_sun = false;
+                }
+                eq->add_event(sun_event);
+            }  
+
+            // Periodically make the moon rise or set
+            if (current_tick % 67 == 0) {
+                std::shared_ptr<tbdmud::event_item> moon_event = std::shared_ptr<tbdmud::event_item>(new tbdmud::event_item());
+                moon_event->set_origin("world");  // TODO:  pick something that doesn't mess up if a character names themselves that
+                moon_event->set_name("SUN");
+                moon_event->set_type(tbdmud::event_type::NOTICE);
+                moon_event->set_scope(tbdmud::event_scope::WORLD);
+                if (!state_moon) {
+                    if (state_sun) {
+                        moon_event->set_message(tbdmud::event_scope::WORLD, "You can barely see the moon rising");
+                    }
+                    else {
+                        moon_event->set_message(tbdmud::event_scope::WORLD, "The moon rises");
+                    }
+                    state_moon = true;
+                }
+                else {
+                    moon_event->set_message(tbdmud::event_scope::WORLD, "The moon sets");
+                    state_moon = false;
+                }
+                eq->add_event(moon_event);
+            }  
+        }
+
+        /***********************************************************************************************
+         * COMMAND PARSER
+         * Decode commands given by the client, create events and put them in the priority queue
+         * Multiple commands can be given on a line, separated by ;
+         * Individual command arguments are separated by spaces: <command> <arg1> <arg2>, etc
+         * After all explicit commands are checked for, we will check to see if the command matches valid exits from the room
+         ***********************************************************************************************/  
         void command_parse(std::shared_ptr<session> client, std::string line)
         {
             const std::string command_delimiters = ";";
@@ -276,7 +180,9 @@ class world {
     
             // Iterate over each command
             for(std::string c : commands) {
-                std::cout << "Parsing command:  " << c << std::endl;
+                #ifdef DEBUG
+                std::cout << "Parsing command line:  " << c << std::endl;
+                #endif
 
                 std::vector<std::string> v_command;
                 std::size_t c_position;
@@ -299,18 +205,16 @@ class world {
                 }
                 v_command.push_back(c);
 
-                for(std::string sub : v_command) {
-                    std::cout << "sub:  " << sub << std::endl;
-                }
-
+                #ifdef DEBUG
                 std::cout << "Processing command:  " << v_command[0] << std::endl;
+                #endif
 
                 /***** ?/HELP *****/
                 if ((v_command[0].at(0) == '?') || (boost::iequals(v_command[0], "help"))) {
                     client->post("\nHelp - Valid Commands:\n");
                     client->post("? or HELP       : help\n");
                     client->post("who             : show connected players\n");
-                    client->post("look            : show room description\n");
+                    client->post("look/l          : show room description\n");
                     client->post("tell player ... : only player hears ...\n");
                     client->post("say ...         : everyone in the room hears ...\n");
                     client->post("shout ...       : everyone in the zone hears ...\n");
@@ -327,11 +231,13 @@ class world {
                     }
                     client->post("\n");
                 }
-                /***** look *****/
-                else if (boost::iequals(v_command[0], "look")) {
+                /***** look/l *****/
+                else if ((boost::iequals(v_command[0], "look")) || ((v_command.size() == 1) && boost::iequals(v_command[0], "l"))) {
+                    #ifdef DEBUG
                     std::cout << "parsing look" << std::endl;
                     std::cout << "current_room = " << pc->get_current_room() << std::endl;
                     std::cout << "current_zone = " << pc->get_current_zone() << std::endl;
+                    #endif
                     std::shared_ptr<room> current_room = find_room(pc->get_current_zone(), pc->get_current_room());
 
                     client->post("\nYou are in:  " + current_room->get_name() + "\n");
@@ -353,8 +259,6 @@ class world {
 
                     // Check if the target player is connected
                     std::shared_ptr<session> target;
-                    std::cout << "Searching for player " << v_command[1] << std::endl;
-
                     bool match = false;
                     for(auto c : char_to_client_map)
                     {
@@ -377,7 +281,7 @@ class world {
                     }
 
                     tell_event->set_message(tbdmud::event_scope::TARGET, message);
-                    std::cout << "tell event to :  " << tell_event->get_target() << " : " << tell_event->get_message(tbdmud::event_scope::TARGET) << std::endl;
+                    std::cout << "tell event from " << tell_event->get_origin() << " to " << tell_event->get_target() << " : " << tell_event->get_message(tbdmud::event_scope::TARGET) << std::endl;
                     eq->add_event(tell_event);
                 }
                 /***** say ... *****/
@@ -462,6 +366,7 @@ class world {
                 else {
                     bool matches_exit = false;
 
+                    /***** move *****/
                     // If the command is only one word, look to see if it matches one of the exits from the current room
                     if(v_command.size() == 1) {
                         std::shared_ptr<room> origin_room = find_room(pc->get_current_zone(), pc->get_current_room());
@@ -469,19 +374,25 @@ class world {
                         std::map<std::string, std::shared_ptr<room>>::iterator e = exits.begin();
 
                         while (e != exits.end()) {
+                            #ifdef DEBUG
+                            std::cout << "move:  exits = " << e->first << ", " << e->second->get_name() << std::endl;
+                            #endif
+
                             // If the first (and only) word of the command equals one of the exits from the current room, create a move event to that room
-                            if (v_command[0] == e->first) {
+                            if (boost::iequals(v_command[0],  e->first)) {
                                 matches_exit = true;
                                 std::shared_ptr<tbdmud::event_item> move_event = std::shared_ptr<tbdmud::event_item>(new tbdmud::event_item());
 
                                 move_event->set_origin(client->get_player()->get_character()->get_name());
-                                move_event->set_origin_room(pc->get_current_room());
+                                move_event->set_origin_room(origin_room->get_name());
                                 move_event->set_target_room(e->second->get_name());
                                 move_event->set_name("MOVE");
                                 move_event->set_type(tbdmud::event_type::MOVE);
                                 move_event->set_scope(tbdmud::event_scope::ROOM);
 
-                                std::cout << "move event:  " << move_event->get_name() << ":  " << move_event->get_origin() << " to " << move_event->get_target() << std::endl;
+                                #ifdef DEBUG
+                                std::cout << "move event:  move " << move_event->get_origin() << " from " << move_event->get_origin_room() << " to " << move_event->get_target_room() << std::endl;
+                                #endif
                                 eq->add_event(move_event);
                             }
                             e++;
@@ -490,12 +401,206 @@ class world {
                     }
 
                     if (!matches_exit) {
-                        std::cout << "\nUnknown command\n" << std::endl;
-                        client->post("\nUnknown command\n");
+                        #ifdef DEBUG
+                        std::cout << "\nUnknown command or exit\n" << std::endl;
+                        #endif
+                        client->post("\nUnknown command or exit\n");
                     }
                 }
             }  // end for (commands)
         }; // end command_parse()
+
+        /***********************************************************************************************
+         * EVENT PROCESSOR
+         * Take an event and decode the event type, scope, and other parameters to determine the actions
+         * the world should take in response (sending a message to a client's screen, moving a character
+         * from one room to another, etc)
+         ***********************************************************************************************/  
+        void process_events() {
+            // Grab the event at the top of the event queue
+            std::shared_ptr<event_item>        event = eq->next_event();
+            if (event == nullptr) return;  // The queue will return nullptr if there are no events that need processing
+
+            // We have to define all these here because we can't do it inside the case statment
+            std::string                origin_name;
+            session*                   origin_client    = nullptr;
+            std::shared_ptr<character> origin_char      = nullptr;
+            std::shared_ptr<zone>      origin_zone      = nullptr;
+            std::string                origin_room_name;
+            std::shared_ptr<room>      origin_room      = nullptr; 
+            std::string                target_name;
+            session*                   target_client    = nullptr;
+            std::shared_ptr<character> target_char      = nullptr;
+            std::shared_ptr<zone>      target_zone      = nullptr; 
+            std::string                target_room_name;
+            std::shared_ptr<room>      target_room      = nullptr; 
+            std::string                message;
+            std::map<std::string, session*>::iterator  ch;
+
+            if (event == nullptr) {
+                std::cout << "Error - NULL event" << std::endl; 
+            }
+            else {
+                switch(event->get_type()) {
+                    case NOTICE:
+                        // Get the relevant fields for NOTICE events
+                        origin_name      = event->get_origin();
+
+                        message = event->get_message(event_scope::WORLD);
+                        std::cout << "NOTICE event:  " << message << std::endl;
+
+                        // Broadcast to everyone in the world - these messages don't have an origin or specific target
+                        ch = char_to_client_map.begin();
+                        while (ch != char_to_client_map.end()) {
+                            std::string target_name = ch->first;
+                            ch->second->post("\n" + message + "\n\n");
+                            ch++;
+                        }
+
+                        break;
+                    case SPEAK:
+                        // Get the relevant fields for SPEAK events
+                        origin_name      = event->get_origin();
+                        origin_room_name = event->get_origin_room();
+                        target_name      = event->get_target();
+                        target_room_name = event->get_target_room();
+
+                        // TODO:  develop a better way to get the character pointer given the character name
+                        if (origin_name != "") {
+                            origin_char = char_to_client_map[origin_name]->get_player()->get_character();
+                            origin_client = char_to_client_map[origin_name];
+                        }
+
+                        switch(event->get_scope()) {
+                            case TARGET:  // TELL Event
+                                if ((origin_name != "") && (target_name != "")) {
+                                    std::cout << "TELL to " << target_name << ":  " << event->get_message(TARGET) << std::endl;
+                                    target_char = char_to_client_map[target_name]->get_player()->get_character();
+                                    target_client = char_to_client_map[target_name];
+
+                                    // Write the messages out to the origin and target clients
+                                    if (target_client != nullptr) {
+                                        target_client->post("\n" + origin_name + " tells you: " + event->get_message(TARGET) + "\n\n");
+                                    }
+                                    if (origin_client != nullptr) {
+                                        origin_client->post("\nYou tell " + target_name + ":  " + event->get_message(TARGET) + "\n\n");
+                                    }
+                                }
+                                else {
+                                    std::cout << "Error - Malformed TELL event\n" << std::endl;
+                                }
+
+                                break;
+                            case ROOM:  // SAY Event
+                                message = event->get_message(event_scope::ROOM);
+                                std::cout << "SAY event:  " << message << std::endl;
+
+                                origin_room = find_room(origin_char->get_current_zone(), origin_char->get_current_room());
+                                
+                                // Broadcast to everyone else in the room what the origin player said
+                                for (std::shared_ptr<character> ch : origin_room->get_characters()) {
+                                    if (ch->get_name() != origin_name) {
+                                        char_to_client_map[ch->get_name()]->post("\n" + origin_name + " says:  " + message + "\n\n");
+                                    }
+                                    else {
+                                        origin_client->post("\nYou say:  " + message + "\n\n");
+                                    }
+                                }
+
+                                break;
+                            case ZONE:  // Shout Event
+                                message = event->get_message(event_scope::ZONE);
+                                std::cout << "SHOUT event:  " << message << std::endl;
+
+                                origin_zone = find_zone(origin_char->get_current_zone());
+                                
+                                // Broadcast to everyone else in the zone what the origin player said
+                                for (std::shared_ptr<character> ch : origin_zone->get_characters()) {
+                                    if (ch->get_name() != origin_name) {
+                                        char_to_client_map[ch->get_name()]->post("\n" + origin_name + " shouts:  " + message + "\n\n");
+                                    }
+                                    else {
+                                        origin_client->post("\nYou shout:  " + message + "\n\n");
+                                    }
+                                }
+
+                                break;
+                            case WORLD:  // Broadcast Event
+                                message = event->get_message(event_scope::WORLD);
+                                std::cout << "BROADCAST event:  " << message << std::endl;
+
+                                // Broadcast to everyone else in the world what the origin player said
+                                ch = char_to_client_map.begin();
+                                while (ch != char_to_client_map.end()) {
+                                    std::string target_name = ch->first;
+                                    if (target_name != origin_name) {
+                                        ch->second->post("\n" + origin_name + " broadcasts:  " + message + "\n\n");
+                                    }
+                                    else {
+                                        origin_client->post("\nYou broadcast:  " + message + "\n\n");
+                                    }
+                                    ch++;
+                                }
+
+                                break;
+                            default:
+                                std::cout << "Error - Unknown SPEAK event:  " << event->get_name() << std::endl;
+                                break;
+                        }
+                        break;
+                    case MOVE:
+                        // Get the relevant fields for MOVE events
+                        origin_name      = event->get_origin();
+                        origin_room_name = event->get_origin_room();
+                        target_room_name = event->get_target_room();
+
+                        // TODO:  develop a better way to get the character pointer given the character name
+                        if (origin_name != "") {
+                            origin_char = char_to_client_map[origin_name]->get_player()->get_character();
+                            origin_client = char_to_client_map[origin_name];
+                        }
+
+                        if (origin_room_name != "" && target_room_name != "") {
+                            // TODO:  Handle moving from one zone to another
+                            //origin_zone = find_zone(origin_char->get_current_zone());
+                            origin_room = find_room(origin_char->get_current_zone(), origin_room_name);
+                            target_room = find_room(origin_char->get_current_zone(), target_room_name);
+                            std::cout << "MOVE event:  move " << origin_name << " from " << origin_room_name << " to " << target_room_name << std::endl;
+
+                            // Broadcast to everyone else in the origin room that the player left
+                            for (std::shared_ptr<character> ch : origin_room->get_characters()) {
+                                if (ch->get_name() != origin_name) {
+                                    char_to_client_map[ch->get_name()]->post("\n" + origin_name + " left the room towards " + target_room_name + "\n\n");
+                                }
+                                else {
+                                    origin_client->post("\nYou left the room\n\n");
+                                }
+                            }
+
+                            // Actually perform the room transition
+                            origin_room->leave_room(origin_char);
+                            target_room->enter_room(origin_char);
+
+                            // Broadcast to everyone else in the target room that the player has arrived
+                            for (std::shared_ptr<character> ch : target_room->get_characters()) {
+                                if (ch->get_name() != origin_name) {
+                                    char_to_client_map[ch->get_name()]->post("\n" + origin_name + " has entered the room\n\n");
+                                }
+                                else {
+                                    origin_client->post("\nYou have entered " + target_room_name + "\n\n");
+                                }
+                            }
+                        }
+                        else {
+                            std::cout << "Error - Malformed MOVE event\n" << std::endl;
+                        }
+                        break;
+                    default:
+                        std::cout << "Unknown event:  " << event->get_name() << std::endl;
+                        break;
+                }
+            }
+        };
 };
 
 }  // end namespace tbdmud

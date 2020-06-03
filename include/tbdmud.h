@@ -1,17 +1,14 @@
-// This class contains information and methods relating to the current player, and is created when a new telnet session is started
-// There is exactly one player per telnet connection
-// The player object is populated with information from the user file and the system on creation
-// The player's name is unique for this server.
 #ifndef TBDMUD_H_INCLUDED
 #define TBDMUD_H_INCLUDED
 
 #include <optional>
 #include <map>
+#include <events.h>
 
 namespace tbdmud {
 
-// To hold data about the character currently being used by a player
-// (This stores and handles data relevant to the server game)
+// This class holds data about the character currently being used by a player in the world
+// (The character is created by the World object and then registered with the player
 class character {
     private:
         std::string                   name;
@@ -28,19 +25,21 @@ class character {
         // Constructor - Pass in the character's name
         character(std::string n) {
             name = n;
-            std::cout << "Character created w/o event queue - name = " << n << std::endl;
+            std::cout << "Character " << n << " created" << std::endl;
         };
 
         // Constructor - Pass in the character's name and a pointer to the event queue
         character(std::string n, std::shared_ptr<event_queue> e) {
             eq = e;
             name = n;
-            std::cout << "Character created w' event queue - name = " << n << std::endl;
+            std::cout << "Character " << n << " created" << std::endl;
         };
 
         void register_event_queue(std::shared_ptr<event_queue> e) {
             eq = e;
-            std::cout << "Character event queue registered" << std::endl;
+            #ifdef DEBUG
+            std::cout << "Character " << name << " " << "event queue registered" << std::endl;
+            #endif
         }
 
         std::shared_ptr<event_queue> get_event_queue() {
@@ -80,8 +79,12 @@ class character {
         };
 };
 
-// To hold data regarding the currently connected player
+// This class contains information and methods relating to the current player, and is created when a new telnet session is started
 // (This stores and handles data relevant to the server connection)
+// There is exactly one player per telnet connection
+// The player object is populated with information from the user file and the system on creation
+// The player's name is unique for this server.
+// The World object will create the character that will be registered to this player
 class player {
     private:
         std::shared_ptr<character> pc;
@@ -153,6 +156,7 @@ class player {
 
 
 // A room is the container for all characters and objects in that room, and handles room-wide events
+// The zone object will create and register the rooms in that zone
 class room {
     private:
         std::string name;
@@ -163,13 +167,13 @@ class room {
     public:
         // Default Constructor
         room() {
-            std::cout << "Room " << name << " constructed w/o event queue" << std::endl;
+            std::cout << "Constructed room " << name << std::endl;
         }
     
         room(std::string n, std::shared_ptr<event_queue> e) {
             name = n;
             eq = e;
-            std::cout << "Room " << name << " constructed with event queue:  " << eq->name << std::endl;
+            std::cout << "Constructed room " << name << std::endl;
         };
 
         std::string get_name() {
@@ -223,7 +227,9 @@ class room {
         };
 
         void enter_room(std::shared_ptr<character> c) {
-            std::cout << "Character " << c->get_name() << " entered room " << name << std::endl;
+            #ifdef DEBUG
+            std::cout << c->get_name() << " entered room " << name << std::endl;
+            #endif
             c->register_event_queue(eq);
             c->set_current_room(name);
             characters.push_back(c);
@@ -242,6 +248,7 @@ class room {
 };
 
 // The zone is the container for all the rooms in that zone, and handles zone-wide events
+// The world object will create and register each zone
 class zone {
     private:
         std::string name;
@@ -253,20 +260,21 @@ class zone {
     public:
         // Default Constructor
         zone() {
-            std::cout << "Empty zone constructed" << std::endl;
+            std::cout << "Constructed empty zone" << std::endl;
         };
 
         zone(std::string n, std::shared_ptr<event_queue> e) {
             name = n;
             eq = e;
-            std::cout << "Zone " << name << " constructed" << eq->name << std::endl;
+
+            std::cout << "Constructing zone " << name << ":" << std::endl;
             zone_init();
         };
 
         std::string get_name() {
             return name;
         }
-        
+
         // Get a copy of the vector containing the current players in this zone
         std::vector<std::shared_ptr<character>> get_characters() {
             return characters;
@@ -274,56 +282,56 @@ class zone {
 
         void zone_init() {
             // TODO:  Test rooms until we can read them in from a file
-            rooms.insert({"Start", std::shared_ptr<room>(new room("Start", eq))});  // Center room of 9
-            rooms.insert({"NE",    std::shared_ptr<room>(new room("NE",    eq))});
-            rooms.insert({"N",     std::shared_ptr<room>(new room("N",     eq))});
-            rooms.insert({"NW",    std::shared_ptr<room>(new room("NW",    eq))});
-            rooms.insert({"W",     std::shared_ptr<room>(new room("W",     eq))});
-            rooms.insert({"E",     std::shared_ptr<room>(new room("E",     eq))});
-            rooms.insert({"SE",    std::shared_ptr<room>(new room("SE",    eq))});
-            rooms.insert({"S",     std::shared_ptr<room>(new room("S",     eq))});
-            rooms.insert({"SW",    std::shared_ptr<room>(new room("SW",    eq))});
+            rooms.insert({"Nowhere",   std::shared_ptr<room>(new room("Nowhere",   eq))});  // Default room with no exits - if we end up here there's a problem
+            rooms.insert({"Start",     std::shared_ptr<room>(new room("Start",     eq))});  // Center room of 9
+            rooms.insert({"NorthEast", std::shared_ptr<room>(new room("NorthEast", eq))});
+            rooms.insert({"North",     std::shared_ptr<room>(new room("North",     eq))});
+            rooms.insert({"NorthWest", std::shared_ptr<room>(new room("NorthWest", eq))});
+            rooms.insert({"West",      std::shared_ptr<room>(new room("West",      eq))});
+            rooms.insert({"East",      std::shared_ptr<room>(new room("East",      eq))});
+            rooms.insert({"SouthEast", std::shared_ptr<room>(new room("SouthEast", eq))});
+            rooms.insert({"South",     std::shared_ptr<room>(new room("South",     eq))});
+            rooms.insert({"SouthWest", std::shared_ptr<room>(new room("SouthWest", eq))});
             start_room = rooms["Start"];
 
             // First create all the rooms, then populate the exits for each room (since they link to each other)
-            rooms["Start"]->add_exit("N", rooms["N"]);
-            rooms["Start"]->add_exit("S", rooms["S"]);
-            rooms["Start"]->add_exit("E", rooms["E"]);
-            rooms["Start"]->add_exit("W", rooms["W"]);
+            rooms["Start"]->add_exit("N", rooms["North"]);
+            rooms["Start"]->add_exit("S", rooms["South"]);
+            rooms["Start"]->add_exit("E", rooms["East"]);
+            rooms["Start"]->add_exit("W", rooms["West"]);
 
-            rooms["N"]->add_exit("S", rooms["Start"]);
-            rooms["N"]->add_exit("E", rooms["NE"]);
-            rooms["N"]->add_exit("W", rooms["NW"]);
+            rooms["North"]->add_exit("S", rooms["Start"]);
+            rooms["North"]->add_exit("E", rooms["NorthEast"]);
+            rooms["North"]->add_exit("W", rooms["NorthWest"]);
 
-            rooms["S"]->add_exit("N", rooms["Start"]);
-            rooms["S"]->add_exit("E", rooms["SE"]);
-            rooms["S"]->add_exit("W", rooms["SW"]);
+            rooms["South"]->add_exit("N", rooms["Start"]);
+            rooms["South"]->add_exit("E", rooms["SouthEast"]);
+            rooms["South"]->add_exit("W", rooms["SouthWest"]);
 
-            rooms["E"]->add_exit("N", rooms["NE"]);
-            rooms["E"]->add_exit("S", rooms["SE"]);
-            rooms["E"]->add_exit("W", rooms["Start"]);
+            rooms["East"]->add_exit("N", rooms["NorthEast"]);
+            rooms["East"]->add_exit("S", rooms["SouthEast"]);
+            rooms["East"]->add_exit("W", rooms["Start"]);
 
-            rooms["W"]->add_exit("N", rooms["NW"]);
-            rooms["W"]->add_exit("S", rooms["SW"]);
-            rooms["W"]->add_exit("E", rooms["Start"]);
+            rooms["West"]->add_exit("N", rooms["NorthWest"]);
+            rooms["West"]->add_exit("S", rooms["SouthWest"]);
+            rooms["West"]->add_exit("E", rooms["Start"]);
 
-            rooms["NE"]->add_exit("S", rooms["E"]);
-            rooms["NE"]->add_exit("W", rooms["N"]);
+            rooms["NorthEast"]->add_exit("S", rooms["East"]);
+            rooms["NorthEast"]->add_exit("W", rooms["North"]);
 
-            rooms["NW"]->add_exit("S", rooms["W"]);
-            rooms["NW"]->add_exit("E", rooms["N"]);
+            rooms["NorthWest"]->add_exit("S", rooms["West"]);
+            rooms["NorthWest"]->add_exit("E", rooms["North"]);
 
-            rooms["SE"]->add_exit("N", rooms["E"]);
-            rooms["SE"]->add_exit("W", rooms["S"]);
+            rooms["SouthEast"]->add_exit("N", rooms["East"]);
+            rooms["SouthEast"]->add_exit("W", rooms["South"]);
 
-            rooms["SW"]->add_exit("N", rooms["W"]);
-            rooms["SW"]->add_exit("E", rooms["S"]);
-            std::cout << "Finished creating rooms" << std::endl;
+            rooms["SouthWest"]->add_exit("N", rooms["West"]);
+            rooms["SouthWest"]->add_exit("E", rooms["South"]);
         }
 
         // Register the character with the zone, and the zone name with the character
         void enter_zone(std::shared_ptr<character> c) {
-            std::cout << "Character " << c->get_name() << " entered zone " << name << std::endl;
+            std::cout << c->get_name() << " entered zone " << name << std::endl;
             c->register_event_queue(eq);
             c->set_current_zone(name);
             characters.push_back(c);

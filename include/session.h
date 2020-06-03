@@ -32,7 +32,7 @@ private:
     //std::function<void(session*, std::shared_ptr<tbdmud::character>)> register_character;  // A function pointer to the world's register_character function to pass to session objects
 
     void async_login_username() {
-        const std::string login_prompt = "Enter username or \"new\": --> ";
+        const std::string login_prompt = "Enter username: --> ";
 
         post(login_prompt);
         io::async_read_until(socket, streambuf, "\n", [self = shared_from_this()] (error_code error, std::size_t bytes_transferred)
