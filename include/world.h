@@ -3,15 +3,26 @@
 
 namespace tbdmud {
 
+// The commands that are valid for a player to use
+enum valid_commands {
+    HELP,             // Help message
+    WHO,              // See who is currently logged into the server
+    LOOK,             // Look at the current room and what is in it
+    TELL,             // Send a message to a specific player
+    SAY,              // Say something to everyone in the current room
+    SHOUT,            // Shout to everyone in the zone
+    BROADCAST         // Broadcast a message to everyone in the world
+};
+    
 // There is only one world object per server
 // The world is the root/container for all the zones, and handles global events
 class world {
     private:
-        std::map<std::string, session*>     char_to_client_map;  // To refer messages to characters back to the associated session
-        uint64_t                            current_tick = 0;    // Master clock for the world (in ticks)    
-        std::vector<std::shared_ptr<zone>>  zones;
-        std::shared_ptr<zone>               start_zone;
-        std::shared_ptr<event_queue>        eq;
+        std::map<std::string, session*>               char_to_client_map;  // To refer messages to characters back to the associated session
+        uint64_t                                      current_tick = 0;    // Master clock for the world (in ticks)    
+        std::map<std::string, std::shared_ptr<zone>>  zones;
+        std::shared_ptr<zone>                         start_zone;          // The default zone that new players should start in
+        std::shared_ptr<event_queue>                  eq;
 
     public:
         // World Constructor
@@ -23,9 +34,9 @@ class world {
             eq->name = "TBDWorld";
 
             // TODO:  Hard-coded test data until we can read it in from a file
-            zones.push_back(std::shared_ptr<zone>(new zone("The Zone", eq)));
-            start_zone = zones.front();
-        }
+            zones.insert({"The Zone", std::shared_ptr<zone>(new zone("The Zone", eq))});
+            start_zone = zones["The Zone"];
+        };
 
         // World Destructor (Vogons?)
         ~world() {}
@@ -38,9 +49,20 @@ class world {
             //event_queue.on_tick();
 
             // Call on_tick() for all the zones in this world
-            for (std::shared_ptr<zone> z : zones) {
-                z->on_tick();
+            std::map<std::string, std::shared_ptr<zone>>::iterator z = zones.begin();
+
+            while (z != zones.end()) {
+                z->second->on_tick();
+                z++;
             }
+        };
+
+        std::shared_ptr<zone> find_zone(std::string z) {
+            return zones[z];
+        };
+
+        std::shared_ptr<room> find_room(std::string z, std::string r) {
+            return zones[z]->get_room(r);
         };
 
         // Create a new character and put them in the starting room
@@ -49,6 +71,7 @@ class world {
             std::shared_ptr<character> c = std::shared_ptr<character>(new character(name));
 
             char_to_client_map.insert({name, client});
+            start_zone->enter_zone(c);
             start_zone->get_start_room()->enter_room(c);
 
             return c;
@@ -111,17 +134,6 @@ class world {
             }
         }
             
-        // The commands that are valid for a player to use
-        enum valid_commands {
-            HELP,             // Help message
-            WHO,              // See who is currently logged into the server
-            LOOK,             // Look at the current room and what is in it
-            TELL,             // Send a message to a specific player
-            SAY,              // Say something to everyone in the current room
-            SHOUT,            // Shout to everyone in the zone
-            BROADCAST         // Broadcast a message to everyone in the world
-        };
-    
         // Decode commands given by the client, create events and put them in the queue
         // Multiple commands can be given on a line, separated by ;
         // Individual command arguments are separated by spaces: <command> <arg1> <arg2>, etc
@@ -131,7 +143,8 @@ class world {
             const std::string command_delimiters = ";";
             const std::string parameter_delimiters = " ";
             std::vector<std::string> commands;
-            std::shared_ptr<tbdmud::event_queue> eq = client->get_player()->get_character()->get_event_queue();
+            std::shared_ptr<tbdmud::character>   pc = client->get_player()->get_character();
+            std::shared_ptr<tbdmud::event_queue> eq = pc->get_event_queue();
     
             line.pop_back();  // Remove the CR that comes with the line
             boost::split(commands, line, boost::is_any_of(command_delimiters), boost::token_compress_on);  // Split the commands
@@ -150,8 +163,20 @@ class world {
                     client->post("Valid Commands:");
                 }
                 else if (boost::iequals(parameters.front(), "who")) {
+                    std::map<std::string, session*>::iterator c = char_to_client_map.begin();
+                    std::string char_name;
+
+                    client->post("Connected characters:");
+                    while (c != char_to_client_map.end()) {
+                        client->post(c->first);
+                        c++;
+                    }
                 }
                 else if (boost::iequals(parameters.front(), "look")) {
+                    std::shared_ptr<room> current_room = find_room(pc->get_current_zone(), pc->get_current_room());
+                    client->post(current_room->get_name());
+                    
+                    client->post("exits:  " + current_room->get_valid_exits());
                 }
                 else if (boost::iequals(parameters.front(), "tell")) {
                     std::shared_ptr<tbdmud::event_item> tell_event = std::shared_ptr<tbdmud::event_item>(new tbdmud::event_item());

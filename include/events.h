@@ -83,8 +83,6 @@ class event_item {
 
         // Return the message for that scope
         std::string get_message(event_scope es) {
-            std::map<event_scope, std::string>::iterator mi = message_map.find(es);
-            
             // The map will return a default-constructed string ("") if the entry has not been set
             return(message_map[es]);
         };
