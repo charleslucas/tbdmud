@@ -180,8 +180,14 @@ class room {
             exits.insert({exit_name, room_ptr});
         }
 
+        // Return a copy of the exits map
+        // TODO:  Find a more efficient way of handling this
+        std::map<std::string, std::shared_ptr<room>> get_exits() {
+            return exits;
+        }
+
         // Get a string of the valid exits for this room
-        std::string get_valid_exits() {
+        std::string get_exits_str() {
             std::map<std::string, std::shared_ptr<room>>::iterator e = exits.begin();
             std::string exits_str;
 
@@ -257,6 +263,10 @@ class zone {
             zone_init();
         };
 
+        std::string get_name() {
+            return name;
+        }
+        
         // Get a copy of the vector containing the current players in this zone
         std::vector<std::shared_ptr<character>> get_characters() {
             return characters;

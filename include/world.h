@@ -82,7 +82,7 @@ class world {
             client->post("\nYou have entered the room.\n");
 
             client->post("\nYou are in:  " + start_zone->get_start_room()->get_name() + "\n");
-            client->post("exits:  " + start_zone->get_start_room()->get_valid_exits() + "\n");
+            client->post("exits:  " + start_zone->get_start_room()->get_exits_str() + "\n");
             client->post("\nStanding around:\n" + start_zone->get_start_room()->get_character_str() + "\n");
 
             return c;
@@ -112,16 +112,18 @@ class world {
             std::shared_ptr<event_item>        event = eq->next_event();
             if (event == nullptr) return;  // The queue will return nullptr if there are no events that need processing
 
-            std::string                origin_name   = event->get_origin();
-            std::shared_ptr<character> origin_char   = nullptr;
-            session*                   origin_client = nullptr;
-            std::shared_ptr<zone>      origin_zone   = nullptr; 
-            std::shared_ptr<room>      origin_room   = nullptr; 
-            std::string                target_name   = event->get_target();
-            std::shared_ptr<character> target_char   = nullptr;
-            session*                   target_client = nullptr;
-            std::shared_ptr<zone>      target_zone   = nullptr; 
-            std::shared_ptr<room>      target_room   = nullptr; 
+            std::string                origin_name      = event->get_origin();
+            session*                   origin_client    = nullptr;
+            std::shared_ptr<character> origin_char      = nullptr;
+            std::shared_ptr<zone>      origin_zone      = nullptr;
+            std::string                origin_room_name = event->get_origin_room();
+            std::shared_ptr<room>      origin_room      = nullptr; 
+            std::string                target_name      = event->get_target();
+            session*                   target_client    = nullptr;
+            std::shared_ptr<character> target_char      = nullptr;
+            std::shared_ptr<zone>      target_zone      = nullptr; 
+            std::string                target_room_name = event->get_target_room();
+            std::shared_ptr<room>      target_room      = nullptr; 
             std::string                message;
             std::map<std::string, session*>::iterator  ch;
 
@@ -215,7 +217,39 @@ class world {
                         }
                         break;
                     case MOVE:
-                        std::cout << "Got MOVE event:  " << event->get_name() << std::endl;
+                        if (origin_room_name != "" && target_room_name != "") {
+                            // TODO:  Handle moving from one zone to another
+                            //origin_zone = find_zone(origin_char->get_current_zone());
+                            origin_room = find_room(origin_char->get_current_zone(), origin_room_name);
+                            target_room = find_room(origin_char->get_current_zone(), target_room_name);
+                        
+                            origin_room->leave_room(origin_char);
+                            // Broadcast to everyone else in the origin room that the player left
+                            for (std::shared_ptr<character> ch : origin_room->get_characters()) {
+                                if (ch->get_name() != origin_name) {
+                                    char_to_client_map[ch->get_name()]->post("\n" + origin_name + " left the room towards " + target_room_name + "\n\n");
+                                }
+                                else {
+                                    origin_client->post("\nYou left the room\n\n");
+                                }
+                            }
+
+                            target_room->enter_room(origin_char);
+                            // Broadcast to everyone else in the target room that the player left
+                            for (std::shared_ptr<character> ch : target_room->get_characters()) {
+                                if (ch->get_name() != origin_name) {
+                                    char_to_client_map[ch->get_name()]->post("\n" + origin_name + " has entered the room\n\n");
+                                }
+                                else {
+                                    origin_client->post("\nYou have entered " + origin_room_name + "\n\n");
+                                }
+                            }
+
+                            std::cout << "Got MOVE event:  " << event->get_name() << std::endl;
+                        }
+                        else {
+                            std::cout << "Malformed MOVE event\n" << std::endl;
+                        }
                         break;
                     default:
                         std::cout << "Got unknown event:  " << event->get_name() << std::endl;
@@ -234,8 +268,6 @@ class world {
             const std::string parameter_delimiters = " ";
             std::vector<std::string> commands;
             std::shared_ptr<tbdmud::character>   pc = client->get_player()->get_character();
-            std::cout << "Player name = " << client->get_player()->get_name() << std::endl;
-            std::cout << "Character name = " << client->get_player()->get_character()->get_name() << std::endl;
             std::shared_ptr<tbdmud::event_queue> eq = pc->get_event_queue();
     
             line.pop_back();  // Remove the LF that comes with the line
@@ -251,6 +283,7 @@ class world {
                 std::string message;
 
                 message = c;  // It's a little wasteful of memory, but we're going to keep a copy of the message instead of reconstructing it from the vector
+
                 // Chop the first word off the remaining message, keep the rest as the message to send
                 size_t space = message.find(" ");    
                 if (space != std::string::npos) {
@@ -272,10 +305,10 @@ class world {
 
                 std::cout << "Processing command:  " << v_command[0] << std::endl;
 
-                /***** ? *****/
+                /***** ?/HELP *****/
                 if ((v_command[0].at(0) == '?') || (boost::iequals(v_command[0], "help"))) {
                     client->post("\nHelp - Valid Commands:\n");
-                    client->post("?               : help\n");
+                    client->post("? or HELP       : help\n");
                     client->post("who             : show connected players\n");
                     client->post("look            : show room description\n");
                     client->post("tell player ... : only player hears ...\n");
@@ -302,7 +335,7 @@ class world {
                     std::shared_ptr<room> current_room = find_room(pc->get_current_zone(), pc->get_current_room());
 
                     client->post("\nYou are in:  " + current_room->get_name() + "\n");
-                    client->post("exits:  " + current_room->get_valid_exits() + "\n");
+                    client->post("exits:  " + current_room->get_exits_str() + "\n");
                     client->post("\nStanding around:\n" + current_room->get_character_str() + "\n");
                 }
                 /***** tell <player> ... *****/
@@ -427,8 +460,39 @@ class world {
                     eq->add_event(broadcast_event);
                 }
                 else {
-                    std::cout << "\nUnknown command\n" << std::endl;
-                    // TODO:  See if parameters.front() equals one of the defined exits from the room
+                    bool matches_exit = false;
+
+                    // If the command is only one word, look to see if it matches one of the exits from the current room
+                    if(v_command.size() == 1) {
+                        std::shared_ptr<room> origin_room = find_room(pc->get_current_zone(), pc->get_current_room());
+                        std::map<std::string, std::shared_ptr<room>> exits = origin_room->get_exits();
+                        std::map<std::string, std::shared_ptr<room>>::iterator e = exits.begin();
+
+                        while (e != exits.end()) {
+                            // If the first (and only) word of the command equals one of the exits from the current room, create a move event to that room
+                            if (v_command[0] == e->first) {
+                                matches_exit = true;
+                                std::shared_ptr<tbdmud::event_item> move_event = std::shared_ptr<tbdmud::event_item>(new tbdmud::event_item());
+
+                                move_event->set_origin(client->get_player()->get_character()->get_name());
+                                move_event->set_origin_room(pc->get_current_room());
+                                move_event->set_target_room(e->second->get_name());
+                                move_event->set_name("MOVE");
+                                move_event->set_type(tbdmud::event_type::MOVE);
+                                move_event->set_scope(tbdmud::event_scope::ROOM);
+
+                                std::cout << "move event:  " << move_event->get_name() << ":  " << move_event->get_origin() << " to " << move_event->get_target() << std::endl;
+                                eq->add_event(move_event);
+                            }
+                            e++;
+                        }
+
+                    }
+
+                    if (!matches_exit) {
+                        std::cout << "\nUnknown command\n" << std::endl;
+                        client->post("\nUnknown command\n");
+                    }
                 }
             }  // end for (commands)
         }; // end command_parse()

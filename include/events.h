@@ -26,12 +26,14 @@ class event_item {
     private:
         // These are overridden by the derivative event class or set by the originating entity
         event_type  event_item_type = TYPE_NOT_SET;       // This should be overridden for each created message
-        std::string name = "testname";                    // Just for logging purposes
+        std::string name = "test event";                  // Just for logging purposes
         event_scope scope = SCOPE_NOT_SET;                // The scope of the effect of this events 
         std::map<event_scope, std::string> message_map;   // Potential different messages for each scope
         uint relative_tick = 0;                           // Set if the event should happen N ticks from now
-        std::string origin = "";                          // Name of the originating character, if it was instigated by a character
-        std::string target = "";                          // Neme of the event target character, if it is an individual (may be the originator)
+        std::string origin = "";                          // Name of the originating character or room
+        std::string target = "";                          // Neme of the target character or room (may be the same as the originator)
+        std::string origin_room = "";                     // Name of the originating room (in case of a move)
+        std::string target_room = "";                     // Neme of the target room      (in case of a move)
 
     public:
 
@@ -95,6 +97,14 @@ class event_item {
             return origin;
         }
 
+        void set_origin_room(std::string o) {
+            origin_room = o;
+        }
+
+        std::string get_origin_room() {
+            return origin_room;
+        }
+
         void set_target(std::string t) {
             target = t;
         }
@@ -103,6 +113,13 @@ class event_item {
             return target;
         }
 
+        void set_target_room(std::string t) {
+            target_room = t;
+        }
+
+        std::string get_target_room() {
+            return target_room;
+        }
 };
 
 // Wrap a derived event class so we can put different derived event types in the same priority queue
