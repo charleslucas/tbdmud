@@ -257,6 +257,11 @@ class zone {
             zone_init();
         };
 
+        // Get a copy of the vector containing the current players in this zone
+        std::vector<std::shared_ptr<character>> get_characters() {
+            return characters;
+        }
+
         void zone_init() {
             // TODO:  Test rooms until we can read them in from a file
             rooms.insert({"Start", std::shared_ptr<room>(new room("Start", eq))});  // Center room of 9
@@ -337,13 +342,13 @@ class zone {
             }
         };
 
+        // Get a pointer to a room object given the name
         std::shared_ptr<room> get_room(std::string r) {
-            std::cout << "Getting room" << r << std::endl;
             return rooms[r];
         }
 
+        // Return the room that is the default starting room for this zone
         std::shared_ptr<room> get_start_room() {
-            std::cout << "Getting start room" << std::endl;
             return start_room;
         }
 };

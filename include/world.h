@@ -115,13 +115,16 @@ class world {
             std::string                origin_name   = event->get_origin();
             std::shared_ptr<character> origin_char   = nullptr;
             session*                   origin_client = nullptr;
+            std::shared_ptr<zone>      origin_zone   = nullptr; 
             std::shared_ptr<room>      origin_room   = nullptr; 
             std::string                target_name   = event->get_target();
             std::shared_ptr<character> target_char   = nullptr;
             session*                   target_client = nullptr;
+            std::shared_ptr<zone>      target_zone   = nullptr; 
             std::shared_ptr<room>      target_room   = nullptr; 
             std::string                message;
-            
+            std::map<std::string, session*>::iterator  ch;
+
             // TODO:  develop a better way to get the character pointer given the character name
             if (origin_name != "") {
                 origin_char = char_to_client_map[origin_name]->get_player()->get_character();
@@ -172,10 +175,39 @@ class world {
 
                                 break;
                             case ZONE:
-                                std::cout << "Got SHOUT event:  " << event->get_message(ZONE) << std::endl;
+                                message = event->get_message(event_scope::ZONE);
+                                std::cout << "Got SHOUT event:  " << message << std::endl;
+
+                                origin_zone = find_zone(origin_char->get_current_zone());
+                                
+                                // Broadcast to everyone else in the room what the origin player said
+                                for (std::shared_ptr<character> ch : origin_zone->get_characters()) {
+                                    if (ch->get_name() != origin_name) {
+                                        char_to_client_map[ch->get_name()]->post("\n" + origin_name + " shouts:  " + message + "\n\n");
+                                    }
+                                    else {
+                                        origin_client->post("\nYou shout:  " + message + "\n\n");
+                                    }
+                                }
+
                                 break;
                             case WORLD:
-                                std::cout << "Got BROADCAST event:  " << event->get_message(WORLD) << std::endl;
+                                message = event->get_message(event_scope::WORLD);
+                                std::cout << "Got BROADCAST event:  " << message << std::endl;
+
+                                // Broadcast to everyone else in the room what the origin player said
+                                ch = char_to_client_map.begin();
+                                while (ch != char_to_client_map.end()) {
+                                    std::string target_name = ch->first;
+                                    if (target_name != origin_name) {
+                                        ch->second->post("\n" + origin_name + " broadcasts:  " + message + "\n\n");
+                                    }
+                                    else {
+                                        origin_client->post("\nYou broadcast:  " + message + "\n\n");
+                                    }
+                                    ch++;
+                                }
+
                                 break;
                             default:
                                 std::cout << "Got unknown SPEAK event:  " << event->get_name() << std::endl;
@@ -241,7 +273,7 @@ class world {
                 std::cout << "Processing command:  " << v_command[0] << std::endl;
 
                 /***** ? *****/
-                if (v_command[0].at(0) == '?') {
+                if ((v_command[0].at(0) == '?') || (boost::iequals(v_command[0], "help"))) {
                     client->post("\nHelp - Valid Commands:\n");
                     client->post("?               : help\n");
                     client->post("who             : show connected players\n");
@@ -253,10 +285,9 @@ class world {
                 }
                 /***** who *****/
                 else if (boost::iequals(v_command[0], "who")) {
-                    std::map<std::string, session*>::iterator c = char_to_client_map.begin();
-                    std::string char_name;
                     client->post("\nConnected:\n");
 
+                    std::map<std::string, session*>::iterator c = char_to_client_map.begin();
                     while (c != char_to_client_map.end()) {
                         client->post(c->first + "\n");
                         c++;
@@ -390,7 +421,7 @@ class world {
                     broadcast_event->set_name("BROADCAST");
                     broadcast_event->set_type(tbdmud::event_type::SPEAK);
                     broadcast_event->set_scope(tbdmud::event_scope::WORLD);
-                    broadcast_event->set_message(tbdmud::event_scope::ZONE, message);
+                    broadcast_event->set_message(tbdmud::event_scope::WORLD, message);
 
                     std::cout << "broadcast event:  " << broadcast_event->get_name() << ":  " << broadcast_event->get_message(tbdmud::event_scope::WORLD) << std::endl;
                     eq->add_event(broadcast_event);
