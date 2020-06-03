@@ -70,12 +70,23 @@ class world {
             std::cout << "world:  creating new character " << std::endl;
             std::shared_ptr<character> c = std::shared_ptr<character>(new character(name));
 
+            // Broadcast to everyone else that a new player entered the room
+            for (std::shared_ptr<character> ch : start_zone->get_start_room()->get_characters()) {
+                char_to_client_map[ch->get_name()]->post("\n" + name + " has entered the room.\n");
+            }
+
             char_to_client_map.insert({name, client});
             start_zone->enter_zone(c);
             start_zone->get_start_room()->enter_room(c);
 
+            client->post("\nYou have entered the room.\n");
+
+            client->post("\nYou are in:  " + start_zone->get_start_room()->get_name() + "\n");
+            client->post("exits:  " + start_zone->get_start_room()->get_valid_exits() + "\n");
+            client->post("\nStanding around:\n" + start_zone->get_start_room()->get_character_str() + "\n");
+
             return c;
-        }
+        };
 
         // Register an existing character and put them in the starting room
         // TODO:  Put them in the room they logged out in
@@ -83,17 +94,18 @@ class world {
             std::cout << "world:  registering character " << c->get_name() << std::endl;
 
             char_to_client_map.insert({c->get_name(), client});
+            start_zone->enter_zone(c);
             start_zone->get_start_room()->enter_room(c);
-        }
+        };
 
         // Delete a character - remove them from the room they are in and other cleanup
         void remove_character(std::string character_name) {
             std::cout << "world:  removing character " << character_name << std::endl;
 
             char_to_client_map.erase(character_name);
-            //start_zone->get_start_room()->enter_room(c);
+            // TODO:  Remove from zone
             // TODO:  Remove from room
-        }
+        };
 
         void process_events() {
             std::shared_ptr<event_item> event;
@@ -132,7 +144,7 @@ class world {
                         break;
                 }
             }
-        }
+        };
             
         // Decode commands given by the client, create events and put them in the queue
         // Multiple commands can be given on a line, separated by ;
@@ -144,152 +156,205 @@ class world {
             const std::string parameter_delimiters = " ";
             std::vector<std::string> commands;
             std::shared_ptr<tbdmud::character>   pc = client->get_player()->get_character();
+            std::cout << "Player name = " << client->get_player()->get_name() << std::endl;
+            std::cout << "Character name = " << client->get_player()->get_character()->get_name() << std::endl;
             std::shared_ptr<tbdmud::event_queue> eq = pc->get_event_queue();
     
+            line.pop_back();  // Remove the LF that comes with the line
             line.pop_back();  // Remove the CR that comes with the line
             boost::split(commands, line, boost::is_any_of(command_delimiters), boost::token_compress_on);  // Split the commands
     
             // Iterate over each command
             for(std::string c : commands) {
-                std::vector<std::string>           parameters;
-                std::vector<std::string>::iterator i;
-    
                 std::cout << "Parsing command:  " << c << std::endl;
-    
-                boost::split(parameters, c, boost::is_any_of(parameter_delimiters), boost::token_compress_on);  // Split the parameters
-    
-                if (boost::iequals(parameters.front(), "?")) {
-                    std::cout << "Help Requested" << std::endl;
-                    client->post("Valid Commands:");
+
+                std::vector<std::string> v_command;
+                std::size_t c_position;
+                std::string message;
+
+                message = c;  // It's a little wasteful of memory, but we're going to keep a copy of the message instead of reconstructing it from the vector
+                // Chop the first word off the remaining message, keep the rest as the message to send
+                size_t space = message.find(" ");    
+                if (space != std::string::npos) {
+                  message = message.substr(space + 1);
                 }
-                else if (boost::iequals(parameters.front(), "who")) {
+
+                // Iterate over the original command string and parse into a vector - words separated by spaces
+                while((c_position = c.find(' ')) != std::string::npos )
+                {   
+                    // If there's multiple words in the command then this gets called first
+                    v_command.push_back(c.substr(0, c_position));
+                    c = c.substr(c_position + 1);
+                }
+                v_command.push_back(c);
+
+                for(std::string sub : v_command) {
+                    std::cout << "sub:  " << sub << std::endl;
+                }
+
+                std::cout << "Processing command:  " << v_command[0] << std::endl;
+
+                /***** ? *****/
+                if (v_command[0].at(0) == '?') {
+                    client->post("\nHelp - Valid Commands:\n");
+                    client->post("?               : help\n");
+                    client->post("who             : show connected players\n");
+                    client->post("look            : show room description\n");
+                    client->post("tell player ... : only player hears ...\n");
+                    client->post("say ...         : everyone in the room hears ...\n");
+                    client->post("shout ...       : everyone in the zone hears ...\n");
+                    client->post("broadcast ...   : everyone connected hears ...\n\n");
+                }
+                /***** who *****/
+                else if (boost::iequals(v_command[0], "who")) {
                     std::map<std::string, session*>::iterator c = char_to_client_map.begin();
                     std::string char_name;
+                    client->post("\nConnected:\n");
 
-                    client->post("Connected characters:");
                     while (c != char_to_client_map.end()) {
-                        client->post(c->first);
+                        client->post(c->first + "\n");
                         c++;
                     }
+                    client->post("\n");
                 }
-                else if (boost::iequals(parameters.front(), "look")) {
+                /***** look *****/
+                else if (boost::iequals(v_command[0], "look")) {
+                    std::cout << "parsing look" << std::endl;
+                    std::cout << "current_room = " << pc->get_current_room() << std::endl;
+                    std::cout << "current_zone = " << pc->get_current_zone() << std::endl;
                     std::shared_ptr<room> current_room = find_room(pc->get_current_zone(), pc->get_current_room());
-                    client->post(current_room->get_name());
-                    
-                    client->post("exits:  " + current_room->get_valid_exits());
+
+                    client->post("\nYou are in:  " + current_room->get_name() + "\n");
+                    client->post("exits:  " + current_room->get_valid_exits() + "\n");
+                    client->post("\nStanding around:\n" + current_room->get_character_str() + "\n");
                 }
-                else if (boost::iequals(parameters.front(), "tell")) {
+                /***** tell <player> ... *****/
+                else if (boost::iequals(v_command[0], "tell")) {
+                    if(v_command.size() < 3) {
+                        client->post("Bad tell command format, expected:  tell player ...\n");
+                        break;
+                    }
+
                     std::shared_ptr<tbdmud::event_item> tell_event = std::shared_ptr<tbdmud::event_item>(new tbdmud::event_item());
-                    tell_event->set_origin(client->get_player()->get_character()->get_name());
+                    tell_event->set_origin(pc->get_name());
                     tell_event->set_name("TELL");
                     tell_event->set_type(tbdmud::event_type::SPEAK);
                     tell_event->set_scope(tbdmud::event_scope::TARGET);
-    
-                    //TODO:  Check if the target player is connected
+
+                    // Check if the target player is connected
                     std::shared_ptr<session> target;
+                    std::cout << "Searching for player " << v_command[1] << std::endl;
+
                     bool match = false;
                     for(auto c : char_to_client_map)
                     {
-                        if(c.second->get_player()->get_character()->get_name() == parameters[1]) {
-                            tell_event->set_target(parameters[1]);
+                        if(c.second->get_player()->get_character()->get_name() == v_command[1]) {
+                            tell_event->set_target(v_command[1]);
                             match = true;
                         }
                     }
-    
+
                     if (match == false) {
-                        std::string error = "Player " + parameters[1] + " is not connected.\n"; 
+                        std::string error = "Player " + v_command[1] + " is not connected.\n"; 
                         client->post(error);
                         return;
                     }
-    
-                    // Chop the first and second words off the string, keep the rest as the message
-                    for (int j = 0; j < 2; j++) {
-                        size_t space = c.find(" ");    
-                        if (space != std::string::npos) {
-                          c = c.substr(space + 1);
-                        }
+
+                    // Chop the first word (the target name) off the remaining message, send the rest
+                    size_t space = message.find(" ");    
+                    if (space != std::string::npos) {
+                      message = message.substr(space + 1);
                     }
-    
-                    tell_event->set_message(tbdmud::event_scope::TARGET, c);
-    
+
+                    tell_event->set_message(tbdmud::event_scope::TARGET, message);
                     std::cout << "tell event to :  " << tell_event->get_target() << " : " << tell_event->get_message(tbdmud::event_scope::TARGET) << std::endl;
                     eq->add_event(tell_event);
                 }
-                else if (boost::iequals(parameters.front(), "say")) {
+                /***** say ... *****/
+                else if (boost::iequals(v_command[0], "say")) {
+                    if(v_command.size() < 2) {
+                        client->post("Bad say command format, expected:  say ...\n");
+                        break;
+                    }
+
                     std::shared_ptr<tbdmud::event_item> say_event = std::shared_ptr<tbdmud::event_item>(new tbdmud::event_item());
+
                     say_event->set_origin(client->get_player()->get_character()->get_name());
                     say_event->set_name("SAY");
                     say_event->set_type(tbdmud::event_type::SPEAK);
                     say_event->set_scope(tbdmud::event_scope::ROOM);
-    
-                    // Chop the first word off the string, keep the rest as the message
-                    size_t space = c.find(" ");    
-                    if (space != std::string::npos) {
-                      c = c.substr(space + 1);
-                    }
-                    say_event->set_message(tbdmud::event_scope::ROOM, c);
-    
-                    std::cout << "say event:  " << say_event->get_name() << std::endl;
+                    say_event->set_message(tbdmud::event_scope::ROOM, message);
+
+                    std::cout << "say event:  " << say_event->get_name() << ": " << say_event->get_message(tbdmud::event_scope::ROOM) << std::endl;
                     eq->add_event(say_event);
                 }
+                /***** dsay ... *****/
                 // TODO:  Remove temporary command "say with delay" for testing event delays
-                else if (boost::iequals(parameters.front(), "dsay")) {
+                else if (boost::iequals(v_command[0], "dsay")) {
+                    if(v_command.size() < 3) {
+                        client->post("Bad dsay command format, expected:  say # ...\n");
+                        break;
+                    }
+
+                    // Chop the first word (the delay time) off the remaining message, send the rest
+                    size_t space = message.find(" ");    
+                    if (space != std::string::npos) {
+                      message = message.substr(space + 1);
+                    }
+
                     std::shared_ptr<tbdmud::event_item> dsay_event = std::shared_ptr<tbdmud::event_item>(new tbdmud::event_item());
+
                     dsay_event->set_origin(client->get_player()->get_character()->get_name());
                     dsay_event->set_name("DSAY");
-                    dsay_event->set_rtick(5);
+                    dsay_event->set_rtick(std::stoi(v_command[1]));
                     dsay_event->set_type(tbdmud::event_type::SPEAK);
                     dsay_event->set_scope(tbdmud::event_scope::ROOM);
-    
-                    // Chop the first word off the string, keep the rest as the message
-                    size_t space = c.find(" ");    
-                    if (space != std::string::npos) {
-                      c = c.substr(space + 1);
-                    }
-                    dsay_event->set_message(tbdmud::event_scope::ROOM, c);
-    
-                    std::cout << "dsay event:  " << dsay_event->get_name() << std::endl;
+                    dsay_event->set_message(tbdmud::event_scope::ROOM, message);
+
+                    std::cout << "dsay event:  " << dsay_event->get_name() << " - " << dsay_event->get_rtick() << ":  " << dsay_event->get_message(tbdmud::event_scope::ROOM) << std::endl;
                     eq->add_event(dsay_event);
                 }
-                else if (boost::iequals(parameters.front(), "shout")) {
+                /***** shout ... *****/
+                else if (boost::iequals(v_command[0], "shout")) {
+                    if(v_command.size() < 2) {
+                        client->post("Bad shout command format, expected:  shout # ...\n");
+                        break;
+                    }
+
                     std::shared_ptr<tbdmud::event_item> shout_event = std::shared_ptr<tbdmud::event_item>(new tbdmud::event_item());
+
                     shout_event->set_origin(client->get_player()->get_character()->get_name());
                     shout_event->set_name("SHOUT");
                     shout_event->set_type(tbdmud::event_type::SPEAK);
                     shout_event->set_scope(tbdmud::event_scope::ZONE);
-    
-                    // Chop the first word off the string, keep the rest as the message
-                    size_t space = c.find(" ");    
-                    if (space != std::string::npos) {
-                      c = c.substr(space + 1);
-                    }
-                    shout_event->set_message(tbdmud::event_scope::ZONE, c);
-    
-                    std::cout << "shout event:  " << shout_event->get_name() << std::endl;
+                    shout_event->set_message(tbdmud::event_scope::ZONE, message);
+
+                    std::cout << "shout event:  " << shout_event->get_name() << ":  " << shout_event->get_message(tbdmud::event_scope::ZONE) << std::endl;
                     eq->add_event(shout_event);
                 }
-                else if (boost::iequals(parameters.front(), "broadcast")) {
+                /***** broadcast ... *****/
+                else if (boost::iequals(v_command[0], "broadcast")) {
+                    if(v_command.size() < 2) {
+                        client->post("Bad broadcast command format, expected:  broadcast # ...\n");
+                        break;
+                    }
                     std::shared_ptr<tbdmud::event_item> broadcast_event = std::shared_ptr<tbdmud::event_item>(new tbdmud::event_item());
+
                     broadcast_event->set_origin(client->get_player()->get_character()->get_name());
                     broadcast_event->set_name("BROADCAST");
                     broadcast_event->set_type(tbdmud::event_type::SPEAK);
                     broadcast_event->set_scope(tbdmud::event_scope::WORLD);
-    
-                    // Chop the first word off the string, keep the rest as the message
-                    size_t space = c.find(" ");    
-                    if (space != std::string::npos) {
-                      c = c.substr(space + 1);
-                    }
-                    broadcast_event->set_message(tbdmud::event_scope::ZONE, c);
-    
-                    std::cout << "broadcast event:  " << broadcast_event->get_name() << std::endl;
+                    broadcast_event->set_message(tbdmud::event_scope::ZONE, message);
+
+                    std::cout << "broadcast event:  " << broadcast_event->get_name() << ":  " << broadcast_event->get_message(tbdmud::event_scope::WORLD) << std::endl;
                     eq->add_event(broadcast_event);
                 }
                 else {
+                    std::cout << "\nUnknown command\n" << std::endl;
                     // TODO:  See if parameters.front() equals one of the defined exits from the room
                 }
-            }
-        }
+            }  // end for (commands)
+        }; // end command_parse()
 };
 
 }  // end namespace tbdmud

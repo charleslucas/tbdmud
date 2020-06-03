@@ -56,7 +56,7 @@ class character {
         }
 
         void set_current_zone(std::string z) {
-            room = z;
+            zone = z;
         }
 
         std::string get_current_zone() {
@@ -100,7 +100,6 @@ class player {
         player(std::string n, uint sid) {
             username = n;
             session_id = sid;
-            std::cout << "Player created (short) - session = " << session_id << ", name = " << n << std::endl;
 
             // For now, when a player connects we automatically create a character with the same name
             pc = std::shared_ptr<character>(new character(username));
@@ -116,7 +115,6 @@ class player {
             connected  = c;
             ip_address = ip;
             port       = p;
-            std::cout << "Player created (long) - session = " << session_id << ", name = " << n << std::endl;
 
             // For now, when a player connects we automatically create a character with the same name
             pc = std::shared_ptr<character>(new character(username));
@@ -178,20 +176,37 @@ class room {
             return name;
         }
 
-        void add_exit(std::string exit_name, std::shared_ptr<room> roomptr) {
-            exits.insert({exit_name, roomptr});
+        void add_exit(std::string exit_name, std::shared_ptr<room> room_ptr) {
+            exits.insert({exit_name, room_ptr});
         }
 
+        // Get a string of the valid exits for this room
         std::string get_valid_exits() {
             std::map<std::string, std::shared_ptr<room>>::iterator e = exits.begin();
             std::string exits_str;
 
             while (e != exits.end()) {
-                exits_str += e->first;
+                exits_str += e->first + " ";
                 e++;
             }
 
             return exits_str;
+        }
+
+        // Get a copy of the vector containing the current players in this room
+        std::vector<std::shared_ptr<character>> get_characters() {
+            return characters;
+        }
+
+        // Get a string of the current players in this room
+        std::string get_character_str() {
+            std::string char_str;
+
+            for (std::shared_ptr<character> c : characters) {
+                char_str += "  " + c->get_name() + "\n";
+            }
+
+            return char_str;
         }
 
         // Call on_tick() for all the characters in this room
@@ -204,6 +219,7 @@ class room {
         void enter_room(std::shared_ptr<character> c) {
             std::cout << "Character " << c->get_name() << " entered room " << name << std::endl;
             c->register_event_queue(eq);
+            c->set_current_room(name);
             characters.push_back(c);
         };  
 
@@ -214,6 +230,7 @@ class room {
             {
                 // Remove the character pointer from the vector
                 ichar = characters.erase(ichar);
+                c->set_current_room("");
             }
         };
 };
@@ -230,13 +247,13 @@ class zone {
     public:
         // Default Constructor
         zone() {
-            std::cout << "Zone " << name << " constructed w/o event queue" << std::endl;
+            std::cout << "Empty zone constructed" << std::endl;
         };
 
         zone(std::string n, std::shared_ptr<event_queue> e) {
             name = n;
             eq = e;
-            std::cout << "Zone " << name << " constructed with event queue:  " << eq->name << std::endl;
+            std::cout << "Zone " << name << " constructed" << eq->name << std::endl;
             zone_init();
         };
 
@@ -289,10 +306,11 @@ class zone {
             std::cout << "Finished creating rooms" << std::endl;
         }
 
-        // Register the character with the zone
+        // Register the character with the zone, and the zone name with the character
         void enter_zone(std::shared_ptr<character> c) {
             std::cout << "Character " << c->get_name() << " entered zone " << name << std::endl;
             c->register_event_queue(eq);
+            c->set_current_zone(name);
             characters.push_back(c);
         };  
 
@@ -304,6 +322,7 @@ class zone {
             {
                 // Remove the character pointer from the vector
                 ichar = characters.erase(ichar);
+                c->set_current_zone("");
             }
         };
 
