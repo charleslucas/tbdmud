@@ -5,6 +5,7 @@
 #include <boost/asio.hpp>
 #include <boost/bind/bind.hpp>
 #include <boost/algorithm/string.hpp>
+#include <string>
 #include <queue>
 #include <vector>
 #include <tbdmud.h>
@@ -29,6 +30,7 @@ private:
     std::shared_ptr<tbdmud::player>  player;     // Once a client has been authenticated they will populate the player data from file
                                                  // This session creates the player object, but the server will own it
     std::function<std::shared_ptr<tbdmud::character>(session*, std::string)> create_character;  // A function pointer to the world's create_character function to pass to session objects
+    std::function<bool(std::string)> does_player_exist;  // A function pointer to the server's does_player_exist function to pass to session objects
     //std::function<void(session*, std::shared_ptr<tbdmud::character>)> register_character;  // A function pointer to the world's register_character function to pass to session objects
 
     void async_login_username() {
@@ -67,6 +69,19 @@ private:
             client_ip << socket.remote_endpoint(error);    // Grab and store the client's IP address and port
             username << std::istream(&streambuf).rdbuf();  // Grab the name input from the connected client
             streambuf.consume(bytes_transferred);
+
+            // Check if we already have a player logged in with that name
+            std::string playername = username.str();
+            playername.pop_back();  // Remove the LF that comes with the line
+            playername.pop_back();  // Remove the CR that comes with the line
+
+            std::cout << "session:: Checking to see if player " << username.str() << "exists" << std::endl;
+            if (does_player_exist(playername)) {
+                const std::string prompt = "\n" + playername + " is already in use\n";
+                post(prompt);
+                async_login_username(); // Register this routine to run again instead of async_read()
+                return;
+            }
 
             boost::split(substrings, client_ip.str(), boost::is_any_of(delimiters), boost::token_compress_on);  // Split the IP address and port
 
@@ -145,10 +160,11 @@ private:
 public:
 
     // Constructor - initialize our internal socket from the passed-in socket
-    session(tcp::socket&& socket, uint sid, std::function<std::shared_ptr<tbdmud::character>(session*, std::string)> cc) : socket(std::move(socket))
+    session(tcp::socket&& socket, uint sid, std::function<std::shared_ptr<tbdmud::character>(session*, std::string)> cc, std::function<bool(std::string)> dpe)  : socket(std::move(socket))
     {
         session_id = sid;
         create_character = cc;
+        does_player_exist = dpe;
     }
 
     // Register the passed-in message and error handler functions to the session object, start asynchronous socket reads

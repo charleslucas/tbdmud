@@ -21,10 +21,10 @@ private:
     uint num_connections = 0;
 
     tbdmud::world* world;                                   // Pointer to the world object in the server
-    std::vector<tbdmud::player> players;                    // Server tracks a list of players, but the session adds/removes from the vector
     std::function<std::shared_ptr<tbdmud::character>(session*, std::string)> create_character;    // Create a function pointer to the world's create_character() function
     std::function<void(session*, std::shared_ptr<tbdmud::character>)>        register_character;  // Create a function pointer to the world's register_character() function
     std::function<void(std::string)>                                         remove_character;    // Create a function pointer to the world's remove_character() function
+    std::function<bool(std::string)>                                         player_exists;       // Create a function pointer to the server's does_player_exist() function
 
 public:
 
@@ -42,6 +42,23 @@ public:
           create_character = std::bind(&tbdmud::world::create_character  , world, std::placeholders::_1, std::placeholders::_2);
         register_character = std::bind(&tbdmud::world::register_character, world, std::placeholders::_1, std::placeholders::_2);
           remove_character = std::bind(&tbdmud::world::remove_character,   world, std::placeholders::_1);
+          player_exists    = std::bind(&server::does_player_exist, this, std::placeholders::_1);
+    }
+
+    bool does_player_exist(std::string name) {
+
+        std::cout << "server:: Checking to see if player " << name << " exists" << std::endl;
+        if (boost::iequals(name, "world")) return true;  // TODO:  Fix that if someone names themselves "world" the server crashes
+
+        // Test to see if that player name (or a case-insensitive version of it) already exists on the server
+        for (std::shared_ptr<session> client : clients) {
+            if (client->get_player() != nullptr) {
+                std::cout << "Comparing " << name << " with " << client->get_player()->get_name() << std::endl;
+                if (boost::iequals(name, client->get_player()->get_name())) return true;
+            }
+        }
+
+        return false;
     }
 
     void async_accept()
@@ -58,7 +75,7 @@ public:
             std::cout << "Number of connections:  " << num_connections << std::endl;
 
             // Create the new client's session
-            std::shared_ptr<session> client = std::make_shared<session>(std::move(*socket), num_connections, create_character);
+            std::shared_ptr<session> client = std::make_shared<session>(std::move(*socket), num_connections, create_character, player_exists);
 
             // Write our welcome message to the new client
             client->post(welcome_msg);

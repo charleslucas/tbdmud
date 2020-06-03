@@ -106,9 +106,12 @@ class world {
         void remove_character(std::string character_name) {
             std::cout << "world:  removing character " << character_name << std::endl;
 
-            char_to_client_map.erase(character_name);
-            // TODO:  Remove from zone
-            // TODO:  Remove from room
+            std::shared_ptr<character> c = char_to_client_map[character_name]->get_player()->get_character();
+            std::string zone = c->get_current_zone();
+            std::string room = c->get_current_room();
+            find_room(zone, room)->leave_room(c);      // Remove the character from the room
+            find_zone(zone)->leave_zone(c);            // Remove the character from the zone
+            char_to_client_map.erase(character_name);  // Remove the character from the world
         };
 
         /***********************************************************************************************
@@ -144,7 +147,7 @@ class world {
                 moon_event->set_scope(tbdmud::event_scope::WORLD);
                 if (!state_moon) {
                     if (state_sun) {
-                        moon_event->set_message(tbdmud::event_scope::WORLD, "You can barely see the moon rising");
+                        moon_event->set_message(tbdmud::event_scope::WORLD, "You can faintly see the moon rising");
                     }
                     else {
                         moon_event->set_message(tbdmud::event_scope::WORLD, "The moon rises");
@@ -152,7 +155,12 @@ class world {
                     state_moon = true;
                 }
                 else {
-                    moon_event->set_message(tbdmud::event_scope::WORLD, "The moon sets");
+                    if (state_sun) {
+                        moon_event->set_message(tbdmud::event_scope::WORLD, "You can faintly see the moon setting");
+                    }
+                    else {
+                        moon_event->set_message(tbdmud::event_scope::WORLD, "The moon sets");
+                    }
                     state_moon = false;
                 }
                 eq->add_event(moon_event);
