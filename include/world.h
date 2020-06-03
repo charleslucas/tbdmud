@@ -108,9 +108,25 @@ class world {
         };
 
         void process_events() {
-            std::shared_ptr<event_item> event;
+            // Grab the event at the top of the event queue
+            std::shared_ptr<event_item>        event = eq->next_event();
+            if (event == nullptr) return;  // The queue will return nullptr if there are no events that need processing
 
-            event = eq->next_event();
+            std::string                origin_name   = event->get_origin();
+            std::shared_ptr<character> origin_char   = nullptr;
+            session*                   origin_client = nullptr;
+            std::shared_ptr<room>      origin_room   = nullptr; 
+            std::string                target_name   = event->get_target();
+            std::shared_ptr<character> target_char   = nullptr;
+            session*                   target_client = nullptr;
+            std::shared_ptr<room>      target_room   = nullptr; 
+            std::string                message;
+            
+            // TODO:  develop a better way to get the character pointer given the character name
+            if (origin_name != "") {
+                origin_char = char_to_client_map[origin_name]->get_player()->get_character();
+                origin_client = char_to_client_map[origin_name];
+            }
 
             if (event == nullptr) {
                 //std::cout << "Got null event" << std::endl; 
@@ -120,10 +136,40 @@ class world {
                     case SPEAK:
                         switch(event->get_scope()) {
                             case TARGET:
-                                std::cout << "Got TELL to " << event->get_target() << ":  " << event->get_message(TARGET);
+                                if ((origin_name != "") && (target_name != "")) {
+                                    std::cout << "Got TELL to " << target_name << ":  " << event->get_message(TARGET);
+                                    target_char = char_to_client_map[target_name]->get_player()->get_character();
+                                    target_client = char_to_client_map[target_name];
+
+                                    // Write the messages out to the origin and target clients
+                                    if (target_client != nullptr) {
+                                        target_client->post("\n" + origin_name + " tells you: " + event->get_message(TARGET) + "\n\n");
+                                    }
+                                    if (origin_client != nullptr) {
+                                        origin_client->post("\nYou tell " + target_name + ":  " + event->get_message(TARGET) + "\n\n");
+                                    }
+                                }
+                                else {
+                                    std::cout << "Malformed TELL event\n" << std::endl;
+                                }
+
                                 break;
                             case ROOM:
-                                std::cout << "Got SAY event:  " << event->get_message(ROOM) << std::endl;
+                                message = event->get_message(event_scope::ROOM);
+                                std::cout << "Got SAY event:  " << message << std::endl;
+
+                                origin_room = find_room(origin_char->get_current_zone(), origin_char->get_current_room());
+                                
+                                // Broadcast to everyone else in the room what the origin player said
+                                for (std::shared_ptr<character> ch : origin_room->get_characters()) {
+                                    if (ch->get_name() != origin_name) {
+                                        char_to_client_map[ch->get_name()]->post("\n" + origin_name + " says:  " + message + "\n\n");
+                                    }
+                                    else {
+                                        origin_client->post("\nYou say:  " + message + "\n\n");
+                                    }
+                                }
+
                                 break;
                             case ZONE:
                                 std::cout << "Got SHOUT event:  " << event->get_message(ZONE) << std::endl;

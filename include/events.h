@@ -30,8 +30,8 @@ class event_item {
         event_scope scope = SCOPE_NOT_SET;                // The scope of the effect of this events 
         std::map<event_scope, std::string> message_map;   // Potential different messages for each scope
         uint relative_tick = 0;                           // Set if the event should happen N ticks from now
-        std::string origin;                               // Name of the originating character, if it was instigated by a character
-        std::string target;                               // Neme of the event target character, if it is an individual (may be the originator)
+        std::string origin = "";                          // Name of the originating character, if it was instigated by a character
+        std::string target = "";                          // Neme of the event target character, if it is an individual (may be the originator)
 
     public:
 
@@ -251,7 +251,7 @@ class event_queue {
                 }
             }
 
-            // Otherwise, if we didn't pop an event off the queue, just return null
+            // Otherwise, if we didn't pop an event off the queue, just return nullptr
             return nullptr;
         };
 
