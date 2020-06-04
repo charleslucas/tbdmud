@@ -5,7 +5,7 @@
 #include <boost/asio.hpp>
 #include <boost/bind/bind.hpp>
 #include <queue>
-#include <tbdmud.h>
+#include <entities.h>
 
 namespace io = boost::asio;
 using tcp = io::ip::tcp;
@@ -46,14 +46,11 @@ public:
     }
 
     bool does_player_exist(std::string name) {
-
-        std::cout << "server:: Checking to see if player " << name << " exists" << std::endl;
         if (boost::iequals(name, "world")) return true;  // TODO:  Fix that if someone names themselves "world" the server crashes
 
         // Test to see if that player name (or a case-insensitive version of it) already exists on the server
         for (std::shared_ptr<session> client : clients) {
             if (client->get_player() != nullptr) {
-                std::cout << "Comparing " << name << " with " << client->get_player()->get_name() << std::endl;
                 if (boost::iequals(name, client->get_player()->get_name())) return true;
             }
         }

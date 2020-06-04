@@ -8,7 +8,7 @@
 #include <string>
 #include <queue>
 #include <vector>
-#include <tbdmud.h>
+#include <entities.h>
 
 namespace io = boost::asio;
 using tcp = io::ip::tcp;
@@ -75,7 +75,9 @@ private:
             playername.pop_back();  // Remove the LF that comes with the line
             playername.pop_back();  // Remove the CR that comes with the line
 
+            #ifdef DEBUG
             std::cout << "session:: Checking to see if player " << username.str() << "exists" << std::endl;
+            #endif
             if (does_player_exist(playername)) {
                 const std::string prompt = "\n" + playername + " is already in use\n";
                 post(prompt);

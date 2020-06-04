@@ -6,7 +6,7 @@
 #include <queue>
 #include <unordered_set>
 #include <events.h>
-#include <tbdmud.h>
+#include <entities.h>
 #include <session.h>
 #include <world.h>
 #include <tbdmud_server.h>

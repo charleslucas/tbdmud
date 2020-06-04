@@ -1,3 +1,6 @@
+// This file contains classes for the entities that can exist in the world and
+// can create events that the world needs to process
+
 #ifndef TBDMUD_H_INCLUDED
 #define TBDMUD_H_INCLUDED
 
